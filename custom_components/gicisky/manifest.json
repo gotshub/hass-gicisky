@@ -1,0 +1,20 @@
+{
+  "domain": "gicisky",
+  "name": "Gicisky",
+  "codeowners": ["@eigger"],
+  "config_flow": true,
+  "bluetooth": [
+    {
+      "manufacturer_id": "0x5053"
+    }
+  ],
+  "dependencies": ["bluetooth_adapters"],
+  "documentation": "https://www.github.com/eigger/hass-gicisky",
+  "iot_class": "local_push",
+  "issue_tracker": "https://www.github.com/eigger/hass-gicisky/issues",
+  "version": "1.0.0",
+  "requirements": [
+    "qrcode[pil]==7.4.2",
+    "python-barcode"
+  ]
+}

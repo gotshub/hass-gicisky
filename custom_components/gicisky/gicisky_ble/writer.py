@@ -180,7 +180,7 @@ class GiciskyClient:
         
         for x in range(width):
             for y in range(height):    
-                pos = (y * width) + x
+                pos = (x * height) + y
                 pixel = image_pixel[pos]
                 if pixel > 0:                    
                     current_byte |= (1 << bit_position)

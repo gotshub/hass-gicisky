@@ -41,16 +41,16 @@ async def write_image(ble_device: BLEDevice, device: DeviceEntry, binary):
                 if service.uuid == SERVICE_GICISKY:
                     for char in service.characteristics:
                         char_uuids.append(char.uuid)
-            _LOGGER.info("  Characteristic UUID: %s %s", char_uuids, len(char_uuids))
+            _LOGGER.info("  Characteristic UUID: %s", char_uuids)
             if len(char_uuids) == 3:
                 gicisky = GiciskyClient(client, char_uuids, device)
+                await gicisky.start_notify()
                 await gicisky.write_image(binary)
-                return True
+                await gicisky.stop_notify()
             await client.disconnect()
     except Exception as e:
         _LOGGER.info("except %s", e)
         await client.disconnect()
-    return False
 
     
 class BLETransport():
@@ -74,7 +74,7 @@ class BLETransport():
         return cast(WrapFuncType, wrapper)
     
     async def read(self) -> bytes:
-        return await self.read_notify(60)
+        return await self.read_notify(30)
 
     async def write(self, uuid: str, data: bytes):
         return await self.write_ble(uuid, data)
@@ -108,7 +108,6 @@ class BLETransport():
     async def stop_notify(self, uuid: str):
         """Stop notifications from the BLE characteristic."""
         await self._client.stop_notify(uuid)
-        await sleep(0.5)
 
 class GiciskyClient:
     def __init__(self, client: BleakClient, uuids, device: DeviceEntry):
@@ -126,14 +125,12 @@ class GiciskyClient:
         await self._transport.stop_notify(self._cmd_uuid)
 
     async def write_cmd(self, uuid, cmd):
-        await self.start_notify()
         await self._transport.write_ble(uuid, cmd)
-        recv = await self._transport.read()
-        await self.stop_notify()
-        return recv
+        await sleep(0.5)
+        return await self._transport.read()
 
     async def write_image(self, binary):
-        _LOGGER.info("Write image")
+        _LOGGER.info("Start")
         self.image_packet = self.get_image_packet(binary)
         data = await self.write_cmd(self._cmd_uuid, self.get_cmd_packet(0x01))
         while True:
@@ -155,9 +152,8 @@ class GiciskyClient:
                 elif data[1] == 0x00:
                     part = (data[5] << 24) | (data[4] << 16) | (data[3] << 8) | data[2]
                     data = await self.write_cmd(self._img_uuid, self.get_img_packet(part))
-            
-        await sleep(0.5)
-        _LOGGER.info("Write end")
+            await sleep(0.5)
+        _LOGGER.info("End")
     
 
     def get_image_packet(self, binary):

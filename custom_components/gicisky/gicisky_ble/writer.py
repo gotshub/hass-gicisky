@@ -85,18 +85,18 @@ class BLETransport():
         data = self._command_data
         self._command_data = None
         self._event.clear()  # Reset the event for the next notification
+        _LOGGER.info("Recv : %s", data)
         return data
 
     #@disconnect_on_missing_services
     async def write_ble(self, uuid: str, data: bytes):
         """Write data to the BLE characteristic."""
-        #_LOGGER.info("Write UUID: %s, %s", uuid, data)
+        _LOGGER.info("Write UUID: %s, %s", uuid, data)
         await self._client.write_gatt_char(uuid, data)
 
     def _notification_handler(self, _: Any, data: bytearray):
         """Handle incoming notifications and store the received data."""
         self._command_data = data
-        #_LOGGER.info("Recv : %s", data)
         self._event.set()  # Notify the waiting coroutine that data has arrived
     
     #@disconnect_on_missing_services
@@ -126,8 +126,10 @@ class GiciskyClient:
 
     async def write_cmd(self, uuid, cmd):
         await self._transport.write_ble(uuid, cmd)
+        await sleep(0.05)
+        data = await self._transport.read()
         await sleep(0.5)
-        return await self._transport.read()
+        return data
 
     async def write_image(self, binary):
         _LOGGER.info("Start")

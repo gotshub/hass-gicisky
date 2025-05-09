@@ -106,6 +106,7 @@ class BLETransport():
     async def stop_notify(self, uuid: str):
         """Stop notifications from the BLE characteristic."""
         await self._client.stop_notify(uuid)
+        await sleep(0.5)
 
 class GiciskyClient:
     def __init__(self, client: BleakClient, uuids, device: DeviceEntry):
@@ -152,7 +153,7 @@ class GiciskyClient:
                 elif data[1] == 0x00:
                     part = (data[5] << 24) | (data[4] << 16) | (data[3] << 8) | data[2]
                     data = await self.write_cmd(self._img_uuid, self.get_img_packet(part))
-            await sleep(0.5)
+            
         await sleep(0.5)
         _LOGGER.info("Write end")
     

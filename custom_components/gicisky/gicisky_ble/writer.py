@@ -178,21 +178,15 @@ class GiciskyClient:
         _LOGGER.info("Binary %s", image_data.size)
         _LOGGER.info("Red %s", image_data_red.size)
         
-        for y in range(height):
-            for x in range(width):
-                
+        for x in range(width):
+            for y in range(height):    
                 pos = (y * width) + x
-                if red:
-                    pixel = image_pixel[pos]
-                    if pixel > 100:                    
-                        current_byte |= (1 << bit_position)
-                    pixel_red = image_pixel_red[pos]
-                    if pixel_red > 100:                    
-                        current_byte_red |= (1 << bit_position)
-                else:
-                    pixel = image_pixel[pos]
-                    if pixel > 100:                    
-                        current_byte |= (1 << bit_position)
+                pixel = image_pixel[pos]
+                if pixel > 0:                    
+                    current_byte |= (1 << bit_position)
+                pixel_red = image_pixel_red[pos]
+                if pixel_red > 0:                    
+                    current_byte_red |= (1 << bit_position)
 
                 bit_position -= 1
 
@@ -207,11 +201,8 @@ class GiciskyClient:
             byte_data.append(current_byte)
             byte_data_red.append(current_byte_red)
 
-        # image_packet_에 데이터를 채움
         for byte in byte_data:
             image_packet.append(byte)
-        #print(image_packet)
-        #print(f"image Size({len(image_packet)})")
 
         if red:
             for byte in byte_data_red:

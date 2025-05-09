@@ -41,12 +41,13 @@ async def write_image(ble_device: BLEDevice, device: DeviceEntry, binary):
                 if service.uuid == SERVICE_GICISKY:
                     for char in service.characteristics:
                         char_uuids.append(char.uuid)
-            _LOGGER.info("  Characteristic UUID: %s", char_uuids)
+            _LOGGER.info("  Characteristic UUID: %s %s", char_uuids, len(char_uuids))
             if len(char_uuids) == 3:
                 gicisky = GiciskyClient(client, char_uuids, device)
                 await gicisky.write_image(binary)
             await client.disconnect()
-    except:
+    except Exception as e:
+        _LOGGER.info("except %s", e)
         await client.disconnect()
 
     

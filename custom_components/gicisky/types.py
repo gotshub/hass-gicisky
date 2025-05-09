@@ -1,10 +1,10 @@
-"""Support for gicisky ble."""
+"""The Gicisky Bluetooth integration."""
 
 from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntry
 
 if TYPE_CHECKING:
-    from .coordinator import GiciskyActiveBluetoothProcessorCoordinator
+    from .coordinator import GiciskyPassiveBluetoothProcessorCoordinator
 
-type GiciskyBLEConfigEntry = ConfigEntry[GiciskyActiveBluetoothProcessorCoordinator]
+type GiciskyConfigEntry = ConfigEntry[GiciskyPassiveBluetoothProcessorCoordinator]

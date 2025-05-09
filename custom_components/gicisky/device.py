@@ -1,4 +1,4 @@
-"""Support for Xioami BLE devices."""
+"""Support for Gicisky Bluetooth devices."""
 
 from __future__ import annotations
 

@@ -4,30 +4,21 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 import dataclasses
-import logging
 from typing import Any
 
+from .gicisky_ble import GiciskyBluetoothDeviceData as DeviceData
+from .gicisky_ble.parser import EncryptionScheme
 import voluptuous as vol
-from .gicisky_ble import (
-    GiciskyBluetoothDeviceData as DeviceData,
-)
 
 from homeassistant.components import onboarding
 from homeassistant.components.bluetooth import (
-    BluetoothScanningMode,
-    BluetoothServiceInfo,
+    BluetoothServiceInfoBleak,
     async_discovered_service_info,
-    async_process_advertisements,
 )
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_ADDRESS
 
 from .const import DOMAIN
-
-# How long to wait for additional advertisement packets if we don't have the right ones
-ADDITIONAL_DISCOVERY_TIMEOUT = 60
-
-_LOGGER = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass
@@ -35,11 +26,11 @@ class Discovery:
     """A discovered bluetooth device."""
 
     title: str
-    discovery_info: BluetoothServiceInfo
+    discovery_info: BluetoothServiceInfoBleak
     device: DeviceData
 
 
-def _title(discovery_info: BluetoothServiceInfo, device: DeviceData) -> str:
+def _title(discovery_info: BluetoothServiceInfoBleak, device: DeviceData) -> str:
     return device.title or device.get_device_name() or discovery_info.name
 
 
@@ -50,63 +41,63 @@ class GiciskyConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         """Initialize the config flow."""
-        self._discovery_info: BluetoothServiceInfo | None = None
+        self._discovery_info: BluetoothServiceInfoBleak | None = None
         self._discovered_device: DeviceData | None = None
         self._discovered_devices: dict[str, Discovery] = {}
 
-    async def _async_wait_for_full_advertisement(
-        self, discovery_info: BluetoothServiceInfo, device: DeviceData
-    ) -> BluetoothServiceInfo:
-        """Sometimes first advertisement we receive is blank or incomplete.
-
-        Wait until we get a useful one.
-        """
-        if not device.pending:
-            return discovery_info
-
-        def _process_more_advertisements(
-            service_info: BluetoothServiceInfo,
-        ) -> bool:
-            device.update(service_info)
-            return not device.pending
-
-        return await async_process_advertisements(
-            self.hass,
-            _process_more_advertisements,
-            {"address": discovery_info.address},
-            BluetoothScanningMode.ACTIVE,
-            ADDITIONAL_DISCOVERY_TIMEOUT,
-        )
-
     async def async_step_bluetooth(
-        self, discovery_info: BluetoothServiceInfo
+        self, discovery_info: BluetoothServiceInfoBleak
     ) -> ConfigFlowResult:
         """Handle the bluetooth discovery step."""
         await self.async_set_unique_id(discovery_info.address)
         self._abort_if_unique_id_configured()
         device = DeviceData()
-        _LOGGER.info(f"async_step_bluetooth {device}")
+
         if not device.supported(discovery_info):
             return self.async_abort(reason="not_supported")
 
         title = _title(discovery_info, device)
         self.context["title_placeholders"] = {"name": title}
-
+        self._discovery_info = discovery_info
         self._discovered_device = device
 
-        # Wait until we have received enough information about
-        # this device to detect its encryption type
-        try:
-            self._discovery_info = await self._async_wait_for_full_advertisement(
-                discovery_info, device
-            )
-        except TimeoutError:
-            # This device might have a really long advertising interval
-            # So create a config entry for it, and if we discover it has
-            # encryption later, we can do a reauth
-            return await self.async_step_confirm_slow()
-
+        if device.encryption_scheme == EncryptionScheme.GICISKY_BINDKEY:
+            return await self.async_step_get_encryption_key()
         return await self.async_step_bluetooth_confirm()
+
+    async def async_step_get_encryption_key(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Enter a bindkey for an encrypted Gicisky device."""
+        assert self._discovery_info
+        assert self._discovered_device
+
+        errors = {}
+
+        if user_input is not None:
+            bindkey: str = user_input["bindkey"]
+
+            if len(bindkey) != 32:
+                errors["bindkey"] = "expected_32_characters"
+            else:
+                self._discovered_device.set_bindkey(bytes.fromhex(bindkey))
+
+                # If we got this far we already know supported will
+                # return true so we don't bother checking that again
+                # We just want to retry the decryption
+                self._discovered_device.supported(self._discovery_info)
+
+                if self._discovered_device.bindkey_verified:
+                    return self._async_get_or_create_entry(bindkey)
+
+                errors["bindkey"] = "decryption_failed"
+
+        return self.async_show_form(
+            step_id="get_encryption_key",
+            description_placeholders=self.context["title_placeholders"],
+            data_schema=vol.Schema({vol.Required("bindkey"): vol.All(str, vol.Strip)}),
+            errors=errors,
+        )
 
     async def async_step_bluetooth_confirm(
         self, user_input: dict[str, Any] | None = None
@@ -121,24 +112,10 @@ class GiciskyConfigFlow(ConfigFlow, domain=DOMAIN):
             description_placeholders=self.context["title_placeholders"],
         )
 
-    async def async_step_confirm_slow(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Ack that device is slow."""
-        if user_input is not None:
-            return self._async_get_or_create_entry()
-
-        self._set_confirm_only()
-        return self.async_show_form(
-            step_id="confirm_slow",
-            description_placeholders=self.context["title_placeholders"],
-        )
-
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle the user step to pick discovered device."""
-        _LOGGER.info(f"async_step_user")
         if user_input is not None:
             address = user_input[CONF_ADDRESS]
             await self.async_set_unique_id(address, raise_on_progress=False)
@@ -147,30 +124,20 @@ class GiciskyConfigFlow(ConfigFlow, domain=DOMAIN):
 
             self.context["title_placeholders"] = {"name": discovery.title}
 
-            # Wait until we have received enough information about
-            # this device to detect its encryption type
-            try:
-                self._discovery_info = await self._async_wait_for_full_advertisement(
-                    discovery.discovery_info, discovery.device
-                )
-            except TimeoutError:
-                # This device might have a really long advertising interval
-                # So create a config entry for it, and if we discover
-                # it has encryption later, we can do a reauth
-                return await self.async_step_confirm_slow()
-
+            self._discovery_info = discovery.discovery_info
             self._discovered_device = discovery.device
+
+            if discovery.device.encryption_scheme == EncryptionScheme.GICISKY_BINDKEY:
+                return await self.async_step_get_encryption_key()
 
             return self._async_get_or_create_entry()
 
         current_addresses = self._async_current_ids(include_ignore=False)
-
         for discovery_info in async_discovered_service_info(self.hass, False):
             address = discovery_info.address
             if address in current_addresses or address in self._discovered_devices:
                 continue
             device = DeviceData()
-
             if device.supported(discovery_info):
                 self._discovered_devices[address] = Discovery(
                     title=_title(discovery_info, device),
@@ -199,6 +166,9 @@ class GiciskyConfigFlow(ConfigFlow, domain=DOMAIN):
 
         self._discovery_info = device.last_service_info
 
+        if device.encryption_scheme == EncryptionScheme.GICISKY_BINDKEY:
+            return await self.async_step_get_encryption_key()
+
         # Otherwise there wasn't actually encryption so abort
         return self.async_abort(reason="reauth_successful")
 
@@ -206,6 +176,8 @@ class GiciskyConfigFlow(ConfigFlow, domain=DOMAIN):
         self, bindkey: str | None = None
     ) -> ConfigFlowResult:
         data: dict[str, Any] = {}
+        if bindkey:
+            data["bindkey"] = bindkey
 
         if self.source == SOURCE_REAUTH:
             return self.async_update_reload_and_abort(

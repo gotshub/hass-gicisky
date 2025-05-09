@@ -3,7 +3,7 @@
   "name": "Gicisky",
   "bluetooth": [
     {
-      "connectable": false,
+      "connectable": true,
       "service_data_uuid": "0000fef0-0000-1000-8000-00805f9b34fb"
     }
   ],
@@ -13,5 +13,9 @@
   "documentation": "https://github.com/eigger/hass-gicisky",
   "issue_tracker": "https://www.github.com/eigger/hass-gicisky/issues",
   "iot_class": "local_push",
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "requirements": [
+    "qrcode[pil]==7.4.2",
+    "python-barcode"
+  ]
 }

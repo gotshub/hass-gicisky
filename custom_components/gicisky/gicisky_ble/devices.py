@@ -28,17 +28,17 @@ class DeviceEntry:
 
 
     # 0x0B: (250, 128),  # GICI_BLE_EPD_21_BWR
-    # 0x28: (296, 128),  # GICI_BLE_EPD_29_BW  (2.9Ïù∏Ïπò, 296 √ó 128 ÌîΩÏÖÄ)
+    # 0x28: (296, 128),  # GICI_BLE_EPD_29_BW  (2.9¿Œƒ°, 296 °ø 128 «»ºø)
     # 0x30: (296, 128),  # GICI_BLE_EPD_29_BW
     # 0x2B: (296, 128),  # GICI_BLE_EPD_29_BWR
     # 0x33: (296, 128),  # GICI_BLE_EPD_29_BWR1
-    # 0x48: (400, 300),  # GICI_BLE_EPD_BW_42  (4.2Ïù∏Ïπò, 400 √ó 300 ÌîΩÏÖÄ)
+    # 0x48: (400, 300),  # GICI_BLE_EPD_BW_42  (4.2¿Œƒ°, 400 °ø 300 «»ºø)
     # 0x4B: (400, 300),  # GICI_BLE_EPD_BWR_42
     # 0x40: (400, 300),  # GICI_BLE_TFT_BW_42
     # 0x42: (400, 300),  # GICI_BLE_TFT_BWR_42
-    # 0x68: (800, 480),  # GICI_BLE_EPD_BW_74  (7.4Ïù∏Ïπò, 800 √ó 480 ÌîΩÏÖÄ)
+    # 0x68: (800, 480),  # GICI_BLE_EPD_BW_74  (7.4¿Œƒ°, 800 °ø 480 «»ºø)
     # 0x6A: (800, 480),  # GICI_BLE_EPD_BWR_74
-    # 0xEB: (296, 128),  # GICI_BLE_EPD_BWR_29_SILABS (2.9Ïù∏Ïπò)
+    # 0xEB: (296, 128),  # GICI_BLE_EPD_BWR_29_SILABS (2.9¿Œƒ°)
 
 DEVICE_TYPES: dict[int, DeviceEntry] = {
     0xA0: DeviceEntry(

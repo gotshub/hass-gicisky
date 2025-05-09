@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from .gicisky_ble.parser import (
+from .gicisky_ble import (
     BinarySensorDeviceClass as GiciskyBinarySensorDeviceClass,
-    ExtendedBinarySensorDeviceClass,
     SensorUpdate,
 )
 
@@ -23,16 +22,47 @@ from homeassistant.helpers.sensor import sensor_device_info_to_hass_device_info
 
 from .coordinator import GiciskyPassiveBluetoothDataProcessor
 from .device import device_key_to_bluetooth_entity_key
-from .types import GiciskyBLEConfigEntry
+from .types import GiciskyConfigEntry
 
 BINARY_SENSOR_DESCRIPTIONS = {
     GiciskyBinarySensorDeviceClass.BATTERY: BinarySensorEntityDescription(
         key=GiciskyBinarySensorDeviceClass.BATTERY,
         device_class=BinarySensorDeviceClass.BATTERY,
     ),
+    GiciskyBinarySensorDeviceClass.BATTERY_CHARGING: BinarySensorEntityDescription(
+        key=GiciskyBinarySensorDeviceClass.BATTERY_CHARGING,
+        device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
+    ),
+    GiciskyBinarySensorDeviceClass.CO: BinarySensorEntityDescription(
+        key=GiciskyBinarySensorDeviceClass.CO,
+        device_class=BinarySensorDeviceClass.CO,
+    ),
+    GiciskyBinarySensorDeviceClass.COLD: BinarySensorEntityDescription(
+        key=GiciskyBinarySensorDeviceClass.COLD,
+        device_class=BinarySensorDeviceClass.COLD,
+    ),
+    GiciskyBinarySensorDeviceClass.CONNECTIVITY: BinarySensorEntityDescription(
+        key=GiciskyBinarySensorDeviceClass.CONNECTIVITY,
+        device_class=BinarySensorDeviceClass.CONNECTIVITY,
+    ),
     GiciskyBinarySensorDeviceClass.DOOR: BinarySensorEntityDescription(
         key=GiciskyBinarySensorDeviceClass.DOOR,
         device_class=BinarySensorDeviceClass.DOOR,
+    ),
+    GiciskyBinarySensorDeviceClass.HEAT: BinarySensorEntityDescription(
+        key=GiciskyBinarySensorDeviceClass.HEAT,
+        device_class=BinarySensorDeviceClass.HEAT,
+    ),
+    GiciskyBinarySensorDeviceClass.GARAGE_DOOR: BinarySensorEntityDescription(
+        key=GiciskyBinarySensorDeviceClass.GARAGE_DOOR,
+        device_class=BinarySensorDeviceClass.GARAGE_DOOR,
+    ),
+    GiciskyBinarySensorDeviceClass.GAS: BinarySensorEntityDescription(
+        key=GiciskyBinarySensorDeviceClass.GAS,
+        device_class=BinarySensorDeviceClass.GAS,
+    ),
+    GiciskyBinarySensorDeviceClass.GENERIC: BinarySensorEntityDescription(
+        key=GiciskyBinarySensorDeviceClass.GENERIC,
     ),
     GiciskyBinarySensorDeviceClass.LIGHT: BinarySensorEntityDescription(
         key=GiciskyBinarySensorDeviceClass.LIGHT,
@@ -50,6 +80,10 @@ BINARY_SENSOR_DESCRIPTIONS = {
         key=GiciskyBinarySensorDeviceClass.MOTION,
         device_class=BinarySensorDeviceClass.MOTION,
     ),
+    GiciskyBinarySensorDeviceClass.MOVING: BinarySensorEntityDescription(
+        key=GiciskyBinarySensorDeviceClass.MOVING,
+        device_class=BinarySensorDeviceClass.MOVING,
+    ),
     GiciskyBinarySensorDeviceClass.OCCUPANCY: BinarySensorEntityDescription(
         key=GiciskyBinarySensorDeviceClass.OCCUPANCY,
         device_class=BinarySensorDeviceClass.OCCUPANCY,
@@ -58,49 +92,49 @@ BINARY_SENSOR_DESCRIPTIONS = {
         key=GiciskyBinarySensorDeviceClass.OPENING,
         device_class=BinarySensorDeviceClass.OPENING,
     ),
+    GiciskyBinarySensorDeviceClass.PLUG: BinarySensorEntityDescription(
+        key=GiciskyBinarySensorDeviceClass.PLUG,
+        device_class=BinarySensorDeviceClass.PLUG,
+    ),
     GiciskyBinarySensorDeviceClass.POWER: BinarySensorEntityDescription(
         key=GiciskyBinarySensorDeviceClass.POWER,
         device_class=BinarySensorDeviceClass.POWER,
+    ),
+    GiciskyBinarySensorDeviceClass.PRESENCE: BinarySensorEntityDescription(
+        key=GiciskyBinarySensorDeviceClass.PRESENCE,
+        device_class=BinarySensorDeviceClass.PRESENCE,
+    ),
+    GiciskyBinarySensorDeviceClass.PROBLEM: BinarySensorEntityDescription(
+        key=GiciskyBinarySensorDeviceClass.PROBLEM,
+        device_class=BinarySensorDeviceClass.PROBLEM,
+    ),
+    GiciskyBinarySensorDeviceClass.RUNNING: BinarySensorEntityDescription(
+        key=GiciskyBinarySensorDeviceClass.RUNNING,
+        device_class=BinarySensorDeviceClass.RUNNING,
+    ),
+    GiciskyBinarySensorDeviceClass.SAFETY: BinarySensorEntityDescription(
+        key=GiciskyBinarySensorDeviceClass.SAFETY,
+        device_class=BinarySensorDeviceClass.SAFETY,
     ),
     GiciskyBinarySensorDeviceClass.SMOKE: BinarySensorEntityDescription(
         key=GiciskyBinarySensorDeviceClass.SMOKE,
         device_class=BinarySensorDeviceClass.SMOKE,
     ),
-    ExtendedBinarySensorDeviceClass.ANTILOCK: BinarySensorEntityDescription(
-        key=ExtendedBinarySensorDeviceClass.ANTILOCK,
+    GiciskyBinarySensorDeviceClass.SOUND: BinarySensorEntityDescription(
+        key=GiciskyBinarySensorDeviceClass.SOUND,
+        device_class=BinarySensorDeviceClass.SOUND,
     ),
-    ExtendedBinarySensorDeviceClass.ARMED: BinarySensorEntityDescription(
-        key=ExtendedBinarySensorDeviceClass.ARMED,
-        icon="mdi:shield-check",
-    ),
-    ExtendedBinarySensorDeviceClass.CHILDLOCK: BinarySensorEntityDescription(
-        key=ExtendedBinarySensorDeviceClass.CHILDLOCK,
-    ),
-    ExtendedBinarySensorDeviceClass.DEVICE_FORCIBLY_REMOVED: BinarySensorEntityDescription(
-        key=ExtendedBinarySensorDeviceClass.DEVICE_FORCIBLY_REMOVED,
-        device_class=BinarySensorDeviceClass.PROBLEM,
-    ),
-    ExtendedBinarySensorDeviceClass.DOOR_LEFT_OPEN: BinarySensorEntityDescription(
-        key=ExtendedBinarySensorDeviceClass.DOOR_LEFT_OPEN,
-        device_class=BinarySensorDeviceClass.PROBLEM,
-    ),
-    ExtendedBinarySensorDeviceClass.DOOR_STUCK: BinarySensorEntityDescription(
-        key=ExtendedBinarySensorDeviceClass.DOOR_STUCK,
-        device_class=BinarySensorDeviceClass.PROBLEM,
-    ),
-    ExtendedBinarySensorDeviceClass.FINGERPRINT: BinarySensorEntityDescription(
-        key=ExtendedBinarySensorDeviceClass.FINGERPRINT,
-        icon="mdi:fingerprint",
-    ),
-    ExtendedBinarySensorDeviceClass.KNOCK_ON_THE_DOOR: BinarySensorEntityDescription(
-        key=ExtendedBinarySensorDeviceClass.KNOCK_ON_THE_DOOR,
-    ),
-    ExtendedBinarySensorDeviceClass.PRY_THE_DOOR: BinarySensorEntityDescription(
-        key=ExtendedBinarySensorDeviceClass.PRY_THE_DOOR,
+    GiciskyBinarySensorDeviceClass.TAMPER: BinarySensorEntityDescription(
+        key=GiciskyBinarySensorDeviceClass.TAMPER,
         device_class=BinarySensorDeviceClass.TAMPER,
     ),
-    ExtendedBinarySensorDeviceClass.TOOTHBRUSH: BinarySensorEntityDescription(
-        key=ExtendedBinarySensorDeviceClass.TOOTHBRUSH,
+    GiciskyBinarySensorDeviceClass.VIBRATION: BinarySensorEntityDescription(
+        key=GiciskyBinarySensorDeviceClass.VIBRATION,
+        device_class=BinarySensorDeviceClass.VIBRATION,
+    ),
+    GiciskyBinarySensorDeviceClass.WINDOW: BinarySensorEntityDescription(
+        key=GiciskyBinarySensorDeviceClass.WINDOW,
+        device_class=BinarySensorDeviceClass.WINDOW,
     ),
 }
 
@@ -108,7 +142,7 @@ BINARY_SENSOR_DESCRIPTIONS = {
 def sensor_update_to_bluetooth_data_update(
     sensor_update: SensorUpdate,
 ) -> PassiveBluetoothDataUpdate[bool | None]:
-    """Convert a sensor update to a bluetooth data update."""
+    """Convert a binary sensor update to a bluetooth data update."""
     return PassiveBluetoothDataUpdate(
         devices={
             device_id: sensor_device_info_to_hass_device_info(device_info)
@@ -134,17 +168,17 @@ def sensor_update_to_bluetooth_data_update(
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: GiciskyBLEConfigEntry,
+    entry: GiciskyConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the Gicisky BLE sensors."""
+    """Set up the Gicisky BLE binary sensors."""
     coordinator = entry.runtime_data
     processor = GiciskyPassiveBluetoothDataProcessor(
         sensor_update_to_bluetooth_data_update
     )
     entry.async_on_unload(
         processor.async_add_entities_listener(
-            GiciskyBluetoothSensorEntity, async_add_entities
+            GiciskyBluetoothBinarySensorEntity, async_add_entities
         )
     )
     entry.async_on_unload(
@@ -152,7 +186,7 @@ async def async_setup_entry(
     )
 
 
-class GiciskyBluetoothSensorEntity(
+class GiciskyBluetoothBinarySensorEntity(
     PassiveBluetoothProcessorEntity[GiciskyPassiveBluetoothDataProcessor[bool | None]],
     BinarySensorEntity,
 ):

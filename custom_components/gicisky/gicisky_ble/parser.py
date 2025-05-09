@@ -1,1684 +1,123 @@
-"""Parser for Gicisky BLE advertisements.
-This file is shamlessly copied from the following repository:
-https://github.com/Ernst79/bleparser/blob/c42ae922e1abed2720c7fac993777e1bd59c0c93/package/bleparser/gicisky.py
-MIT License applies.
-"""
-
 from __future__ import annotations
 
-import datetime
 import logging
-import math
 import struct
+from datetime import datetime, timezone
+from enum import Enum
 from typing import Any
 
-from bleak import BleakClient
-from bleak.backends.device import BLEDevice
-from bleak_retry_connector import establish_connection
 from bluetooth_data_tools import short_address
 from bluetooth_sensor_state_data import BluetoothData
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESCCM
-from home_assistant_bluetooth import BluetoothServiceInfo
+from home_assistant_bluetooth import BluetoothServiceInfoBleak
+from sensor_state_data.description import (
+    BaseBinarySensorDescription,
+    BaseSensorDescription,
+)
 from sensor_state_data import (
-    BinarySensorDeviceClass,
     SensorLibrary,
-    SensorUpdate,
-    Units,
 )
-
-from .const import (
-    CHARACTERISTIC_BATTERY,
-    SERVICE_GICISKY,
-    TIMEOUT_1DAY,
-    ExtendedBinarySensorDeviceClass,
-    ExtendedSensorDeviceClass,
-)
-from .devices import DEVICE_TYPES, SLEEPY_DEVICE_MODELS, DeviceEntry
-from .events import EventDeviceKeys
-from .locks import BLE_LOCK_ACTION, BLE_LOCK_ERROR, BLE_LOCK_METHOD
+from .const import MEAS_TYPES
+from .event import BUTTON_EVENTS, DIMMER_EVENTS, EventDeviceKeys
+from .devices import DEVICE_TYPES, DeviceEntry
 
 _LOGGER = logging.getLogger(__name__)
 
 
+class EncryptionScheme(Enum):
+    # No encryption is needed to use this device
+    NONE = "none"
+
+    # 16 byte encryption key expected
+    GICISKY_BINDKEY = "gicisky_bindkey"
+
+
 def to_mac(addr: bytes) -> str:
-    """Return formatted MAC address"""
+    """Return formatted MAC address."""
     return ":".join(f"{i:02X}" for i in addr)
 
 
-def to_unformatted_mac(addr: str) -> str:
-    """Return unformatted MAC address"""
-    return "".join(f"{i:02X}" for i in addr[:])
+def parse_uint(data_obj: bytes, factor: float = 1.0) -> float:
+    """Convert bytes (as unsigned integer) and factor to float."""
+    decimal_places = -int(f"{factor:e}".split("e")[-1])
+    return round(
+        int.from_bytes(data_obj, "little", signed=False) * factor, decimal_places
+    )
+
+
+def parse_int(data_obj: bytes, factor: float = 1.0) -> float:
+    """Convert bytes (as signed integer) and factor to float."""
+    decimal_places = -int(f"{factor:e}".split("e")[-1])
+    return round(
+        int.from_bytes(data_obj, "little", signed=True) * factor, decimal_places
+    )
+
+
+def parse_float(data_obj: bytes, factor: float = 1.0) -> float | None:
+    """Convert bytes (as float) and factor to float."""
+    decimal_places = -int(f"{factor:e}".split("e")[-1])
+    if len(data_obj) == 2:
+        [val] = struct.unpack("<e", data_obj)
+    elif len(data_obj) == 4:
+        [val] = struct.unpack("<f", data_obj)
+    elif len(data_obj) == 8:
+        [val] = struct.unpack("<d", data_obj)
+    else:
+        _LOGGER.error("only 2, 4 or 8 byte long floats are supported in BTHome BLE")
+        return None
+    return round(val * factor, decimal_places)
+
+
+def parse_raw(data_obj: bytes) -> str | None:
+    """Convert bytes to raw hex string."""
+    return data_obj.hex()
+
+
+def parse_string(data_obj: bytes) -> str | None:
+    """Convert bytes to string."""
+    try:
+        return data_obj.decode("UTF-8")
+    except UnicodeDecodeError:
+        _LOGGER.error(
+            "BTHome data contains bytes that can't be decoded to a string (use UTF-8 encoding)"
+        )
+        return None
+
+
+def parse_timestamp(data_obj: bytes) -> datetime:
+    """Convert bytes to a datetime object."""
+    value = datetime.fromtimestamp(
+        int.from_bytes(data_obj, "little", signed=False), tz=timezone.utc
+    )
+    _LOGGER.error("time %s", value)
+    return value
+
+
+def parse_event_type(event_device: str, data_obj: int) -> str | None:
+    """Convert bytes to event type."""
+    if event_device == "dimmer":
+        event_type = DIMMER_EVENTS.get(data_obj)
+    elif event_device == "button":
+        event_type = BUTTON_EVENTS.get(data_obj)
+    else:
+        event_type = None
+    return event_type
 
 
 def parse_event_properties(
-    event_property: str | None, value: int
-) -> dict[str, int | None] | None:
-    """Convert event property and data to event properties."""
-    if event_property:
-        return {event_property: value}
-    return None
-
-
-# Structured objects for data conversions
-TH_STRUCT = struct.Struct("<hH").unpack
-H_STRUCT = struct.Struct("<H").unpack
-T_STRUCT = struct.Struct("<h").unpack
-TTB_STRUCT = struct.Struct("<hhB").unpack
-CND_STRUCT = struct.Struct("<H").unpack
-ILL_STRUCT = struct.Struct("<I").unpack
-LIGHT_STRUCT = struct.Struct("<I").unpack
-FMDH_STRUCT = struct.Struct("<H").unpack
-M_STRUCT = struct.Struct("<L").unpack
-P_STRUCT = struct.Struct("<H").unpack
-BUTTON_STRUCT = struct.Struct("<BBB").unpack
-FLOAT_STRUCT = struct.Struct("<f").unpack
-
-QUAD_BUTTON_TO_NAME = {
-    1: "left",
-    2: "mid_left",
-    3: "mid_right",
-    4: "right",
-}
-
-OBJECTS_DEVICE_TYPE = {
-    "0x4a0c",
-    "0x4a0d",
-    "0x4a0e",
-    "0x4e0c",
-    "0x4e0d",
-    "0x4e0e",
-    "0x560c",
-    "0x560d",
-    "0x560e",
-}
-
-def obj_gicisky(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Battery"""
-    batt = xobj[0]
-    volt = 2.2 + (3.1 - 2.2) * (batt / 100)
-    device.update_predefined_sensor(SensorLibrary.BATTERY__PERCENTAGE, batt)
-    device.update_predefined_sensor(
-        SensorLibrary.VOLTAGE__ELECTRIC_POTENTIAL_VOLT, volt
-    )
-    return {}
-
-# Advertisement conversion of measurement data
-# https://iot.mi.com/new/doc/accesses/direct-access/embedded-development/ble/object-definition
-def obj0003(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Motion"""
-    # 0x0003 is only used by MUE4094RT, which does not send motion clear.
-    # This object is therefore added as event (motion detected).
-    device.fire_event(
-        key=EventDeviceKeys.MOTION,
-        event_type="motion_detected",
-        event_properties=None,
-    )
-    return {}
-
-
-def obj0006(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Fingerprint"""
-    if len(xobj) == 5:
-        key_id_bytes = xobj[0:4]
-        match_byte = xobj[4]
-        if key_id_bytes == b"\x00\x00\x00\x00":
-            key_type = "administrator"
-        elif key_id_bytes == b"\xff\xff\xff\xff":
-            key_type = "unknown operator"
-        elif key_id_bytes == b"\xde\xad\xbe\xef":
-            key_type = "invalid operator"
-        else:
-            key_type = str(int.from_bytes(key_id_bytes, "little"))
-        if match_byte == 0x00:
-            result = "match_successful"
-        elif match_byte == 0x01:
-            result = "match_failed"
-        elif match_byte == 0x02:
-            result = "timeout"
-        elif match_byte == 0x033:
-            result = "low_quality_too_light_fuzzy"
-        elif match_byte == 0x04:
-            result = "insufficient_area"
-        elif match_byte == 0x05:
-            result = "skin_is_too_dry"
-        elif match_byte == 0x06:
-            result = "skin_is_too_wet"
-        else:
-            result = None
-
-        fingerprint = True if match_byte == 0x00 else False
-
-        # Update fingerprint binary sensor
-        device.update_binary_sensor(
-            key=ExtendedBinarySensorDeviceClass.FINGERPRINT,
-            native_value=fingerprint,
-            device_class=ExtendedBinarySensorDeviceClass.FINGERPRINT,
-            name="Fingerprint",
-        )
-        # Update key_id sensor
-        device.update_sensor(
-            key=ExtendedSensorDeviceClass.KEY_ID,
-            name="Key id",
-            device_class=ExtendedSensorDeviceClass.KEY_ID,
-            native_value=key_type,
-            native_unit_of_measurement=None,
-        )
-        # Fire Fingerprint action event
-        if result:
-            device.fire_event(
-                key=EventDeviceKeys.FINGERPRINT,
-                event_type=result,
-                event_properties=None,
-            )
-    return {}
-
-
-def obj0007(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Door"""
-    door_byte = xobj[0]
-    if door_byte == 0x00:
-        # open the door
-        device.update_predefined_binary_sensor(BinarySensorDeviceClass.DOOR, True)
-        device.update_binary_sensor(
-            key=ExtendedBinarySensorDeviceClass.DOOR_STUCK,
-            native_value=False,  # reset door stuck
-            device_class=ExtendedBinarySensorDeviceClass.DOOR_STUCK,
-            name="Door stuck",
-        )
-        device.update_binary_sensor(
-            key=ExtendedBinarySensorDeviceClass.KNOCK_ON_THE_DOOR,
-            native_value=False,  # reset knock on the door
-            device_class=ExtendedBinarySensorDeviceClass.KNOCK_ON_THE_DOOR,
-            name="Knock on the door",
-        )
-    elif door_byte == 0x01:
-        # close the door
-        device.update_predefined_binary_sensor(BinarySensorDeviceClass.DOOR, False)
-        device.update_binary_sensor(
-            key=ExtendedBinarySensorDeviceClass.DOOR_LEFT_OPEN,
-            native_value=False,  # reset door left open
-            device_class=ExtendedBinarySensorDeviceClass.DOOR_LEFT_OPEN,
-            name="Door left open",
-        )
-        device.update_binary_sensor(
-            key=ExtendedBinarySensorDeviceClass.PRY_THE_DOOR,
-            native_value=False,  # reset pry the door
-            device_class=ExtendedBinarySensorDeviceClass.PRY_THE_DOOR,
-            name="Pry the door",
-        )
-    elif door_byte == 0x02:
-        # timeout, not closed
-        device.update_predefined_binary_sensor(BinarySensorDeviceClass.DOOR, True)
-        device.update_binary_sensor(
-            key=ExtendedBinarySensorDeviceClass.DOOR_LEFT_OPEN,
-            native_value=True,
-            device_class=ExtendedBinarySensorDeviceClass.DOOR_LEFT_OPEN,
-            name="Door left open",
-        )
-    elif door_byte == 0x03:
-        # knock on the door
-        device.update_predefined_binary_sensor(BinarySensorDeviceClass.DOOR, False)
-        device.update_binary_sensor(
-            key=ExtendedBinarySensorDeviceClass.KNOCK_ON_THE_DOOR,
-            native_value=True,
-            device_class=ExtendedBinarySensorDeviceClass.KNOCK_ON_THE_DOOR,
-            name="Knock on the door",
-        )
-    elif door_byte == 0x04:
-        # pry the door
-        device.update_predefined_binary_sensor(BinarySensorDeviceClass.DOOR, True)
-        device.update_binary_sensor(
-            key=ExtendedBinarySensorDeviceClass.PRY_THE_DOOR,
-            native_value=True,
-            device_class=ExtendedBinarySensorDeviceClass.PRY_THE_DOOR,
-            name="Pry the door",
-        )
-    elif door_byte == 0x05:
-        # door stuck
-        device.update_predefined_binary_sensor(BinarySensorDeviceClass.DOOR, False)
-        device.update_binary_sensor(
-            key=ExtendedBinarySensorDeviceClass.DOOR_STUCK,
-            native_value=True,
-            device_class=ExtendedBinarySensorDeviceClass.DOOR_STUCK,
-            name="Door stuck",
-        )
-    return {}
-
-
-def obj0008(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """armed away"""
-    value = xobj[0] ^ 1
-    device.update_binary_sensor(
-        key=ExtendedBinarySensorDeviceClass.ARMED,
-        native_value=bool(value),  # Armed away
-        device_class=ExtendedBinarySensorDeviceClass.ARMED,
-        name="Armed",
-    )
-    # Lift up door handle outside the door sends this event from DSL-C08.
-    if device_type == "DSL-C08":
-        device.update_predefined_binary_sensor(
-            BinarySensorDeviceClass.LOCK, bool(value)
-        )
-        # Fire Lock action event
-        device.fire_event(
-            key=EventDeviceKeys.LOCK,
-            event_type="lock_outside_the_door",
-            event_properties=None,
-        )
-        # # Update method sensor
-        device.update_sensor(
-            key=ExtendedSensorDeviceClass.LOCK_METHOD,
-            name="Lock method",
-            device_class=ExtendedSensorDeviceClass.LOCK_METHOD,
-            native_value="manual",
-            native_unit_of_measurement=None,
-        )
-    return {}
-
-
-def obj0010(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Toothbrush"""
-    if xobj[0] == 0:
-        device.update_binary_sensor(
-            key=ExtendedBinarySensorDeviceClass.TOOTHBRUSH,
-            native_value=True,  # Toothbrush On
-            device_class=ExtendedBinarySensorDeviceClass.TOOTHBRUSH,
-            name="Toothbrush",
-        )
+    event_device: str, data_obj: bytes
+) -> dict[str, str | int | float | None] | None:
+    """Convert bytes to event properties."""
+    if event_device == "dimmer":
+        # number of steps for rotating a dimmer
+        return {"steps": int.from_bytes(data_obj, "little", signed=True)}
     else:
-        device.update_binary_sensor(
-            key=ExtendedBinarySensorDeviceClass.TOOTHBRUSH,
-            native_value=False,  # Toothbrush Off
-            device_class=ExtendedBinarySensorDeviceClass.TOOTHBRUSH,
-            name="Toothbrush",
-        )
-    if len(xobj) > 1:
-        device.update_sensor(
-            key=ExtendedSensorDeviceClass.COUNTER,
-            name="Counter",
-            native_unit_of_measurement=Units.TIME_SECONDS,
-            device_class=ExtendedSensorDeviceClass.COUNTER,
-            native_value=xobj[1],
-        )
-    return {}
-
-
-def obj000a(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Body Temperature"""
-    if len(xobj) == 2:
-        temp = T_STRUCT(xobj)[0]
-        if temp:
-            device.update_predefined_sensor(
-                SensorLibrary.TEMPERATURE__CELSIUS, temp / 100
-            )
-    return {}
-
-
-def obj000b(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Lock"""
-    if len(xobj) == 9:
-        lock_action_int = xobj[0] & 0x0F
-        lock_method_int = xobj[0] >> 4
-        key_id = int.from_bytes(xobj[1:5], "little")
-        short_key_id = key_id & 0xFFFF
-
-        # Lock action (event) and lock method (sensor)
-        if (
-            lock_action_int not in BLE_LOCK_ACTION
-            or lock_method_int not in BLE_LOCK_METHOD
-        ):
-            return {}
-        lock_action = BLE_LOCK_ACTION[lock_action_int][2]
-        lock_method = BLE_LOCK_METHOD[lock_method_int]
-
-        # Some specific key_ids represent an error
-        error = BLE_LOCK_ERROR.get(key_id)
-
-        if not error:
-            if key_id == 0x00000000:
-                key_type = "administrator"
-            elif key_id == 0xFFFFFFFF:
-                key_type = "unknown operator"
-            elif key_id == 0xDEADBEEF:
-                key_type = "invalid operator"
-            elif key_id <= 0x7FFFFFF:
-                # Bluetooth (up to 2147483647)
-                key_type = f"Bluetooth key {key_id}"
-            else:
-                # All other key methods have only key ids up to 65536
-
-                if key_id <= 0x8001FFFF:
-                    key_type = f"Fingerprint key id {short_key_id}"
-                elif key_id <= 0x8002FFFF:
-                    key_type = f"Password key id {short_key_id}"
-                elif key_id <= 0x8003FFFF:
-                    key_type = f"Keys key id {short_key_id}"
-                elif key_id <= 0x8004FFFF:
-                    key_type = f"NFC key id {short_key_id}"
-                elif key_id <= 0x8005FFFF:
-                    key_type = f"Two-step verification key id {short_key_id}"
-                elif key_id <= 0x8006FFFF:
-                    key_type = f"Human face key id {short_key_id}"
-                elif key_id <= 0x8007FFFF:
-                    key_type = f"Finger veins key id {short_key_id}"
-                elif key_id <= 0x8008FFFF:
-                    key_type = f"Palm print key id {short_key_id}"
-                else:
-                    key_type = f"key id {short_key_id}"
-
-        # Lock type and state
-        # Lock type can be `lock` or for ZNMS17LM `lock`, `childlock` or `antilock`
-        if device_type == "ZNMS17LM":
-            # Lock type can be `lock`, `childlock` or `antilock`
-            lock_type = BLE_LOCK_ACTION[lock_action_int][1]
-        else:
-            # Lock type can only be `lock` for other locks
-            lock_type = "lock"
-        lock_state = BLE_LOCK_ACTION[lock_action_int][0]
-
-        # Update lock state
-        if lock_type == "lock":
-            device.update_predefined_binary_sensor(
-                BinarySensorDeviceClass.LOCK, lock_state
-            )
-        elif lock_type == "childlock":
-            device.update_binary_sensor(
-                key=ExtendedBinarySensorDeviceClass.CHILDLOCK,
-                native_value=lock_state,
-                device_class=ExtendedBinarySensorDeviceClass.CHILDLOCK,
-                name="Childlock",
-            )
-        elif lock_type == "antilock":
-            device.update_binary_sensor(
-                key=ExtendedBinarySensorDeviceClass.ANTILOCK,
-                native_value=lock_state,
-                device_class=ExtendedBinarySensorDeviceClass.ANTILOCK,
-                name="Antilock",
-            )
-        else:
-            return {}
-
-        # Update key_id sensor
-        device.update_sensor(
-            key=ExtendedSensorDeviceClass.KEY_ID,
-            name="Key id",
-            device_class=ExtendedSensorDeviceClass.KEY_ID,
-            native_value=key_type,
-            native_unit_of_measurement=None,
-        )
-        # Fire Lock action event: see BLE_LOCK_ACTTION
-        device.fire_event(
-            key=EventDeviceKeys.LOCK,
-            event_type=lock_action,
-            event_properties=None,
-        )
-        # # Update method sensor: see BLE_LOCK_METHOD
-        device.update_sensor(
-            key=ExtendedSensorDeviceClass.LOCK_METHOD,
-            name="Lock method",
-            device_class=ExtendedSensorDeviceClass.LOCK_METHOD,
-            native_value=lock_method.value,
-            native_unit_of_measurement=None,
-        )
-        if error:
-            # Fire event with the error: see BLE_LOCK_ERROR
-            device.fire_event(
-                key=EventDeviceKeys.ERROR,
-                event_type=error,
-                event_properties=None,
-            )
-    return {}
-
-
-def obj000f(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Moving with light"""
-    if len(xobj) == 3:
-        illum = LIGHT_STRUCT(xobj + b"\x00")[0]
-        device.update_predefined_binary_sensor(BinarySensorDeviceClass.MOTION, True)
-        if device_type in ["MJYD02YL", "RTCGQ02LM"]:
-            # MJYD02YL:  1 - moving no light, 100 - moving with light
-            # RTCGQ02LM: 0 - moving no light, 256 - moving with light
-            device.update_predefined_binary_sensor(
-                BinarySensorDeviceClass.LIGHT, bool(illum >= 100)
-            )
-        elif device_type == "CGPR1":
-            # CGPR1:     moving, value is illumination in lux
-            device.update_predefined_sensor(SensorLibrary.LIGHT__LIGHT_LUX, illum)
-    return {}
-
-
-def obj1001(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """button"""
-    if len(xobj) != 3:
-        return {}
-
-    (button_type, value, press_type) = BUTTON_STRUCT(xobj)
-
-    # button_type represents the pressed button or rubiks cube rotation direction
-    remote_command = None
-    fan_remote_command = None
-    ven_fan_remote_command = None
-    bathroom_remote_command = None
-    cube_rotation = None
-
-    one_btn_switch = False
-    two_btn_switch_left = False
-    two_btn_switch_right = False
-    three_btn_switch_left = False
-    three_btn_switch_middle = False
-    three_btn_switch_right = False
-
-    if button_type == 0:
-        remote_command = "on"
-        fan_remote_command = "fan"
-        ven_fan_remote_command = "swing"
-        bathroom_remote_command = "stop"
-        one_btn_switch = True
-        two_btn_switch_left = True
-        three_btn_switch_left = True
-        cube_rotation = "rotate_right"
-    elif button_type == 1:
-        remote_command = "off"
-        fan_remote_command = "light"
-        ven_fan_remote_command = "power"
-        bathroom_remote_command = "air_exchange"
-        two_btn_switch_right = True
-        three_btn_switch_middle = True
-        cube_rotation = "rotate_left"
-    elif button_type == 2:
-        remote_command = "brightness"
-        fan_remote_command = "wind_speed"
-        ven_fan_remote_command = "timer_60_minutes"
-        bathroom_remote_command = "fan"
-        two_btn_switch_left = True
-        two_btn_switch_right = True
-        three_btn_switch_right = True
-    elif button_type == 3:
-        remote_command = "plus"
-        fan_remote_command = "color_temperature"
-        ven_fan_remote_command = "increase_wind_speed"
-        bathroom_remote_command = "increase_speed"
-        three_btn_switch_left = True
-        three_btn_switch_middle = True
-    elif button_type == 4:
-        remote_command = "M"
-        fan_remote_command = "wind_mode"
-        ven_fan_remote_command = "timer_30_minutes"
-        bathroom_remote_command = "decrease_speed"
-        three_btn_switch_middle = True
-        three_btn_switch_right = True
-    elif button_type == 5:
-        remote_command = "min"
-        fan_remote_command = "brightness"
-        ven_fan_remote_command = "decrease_wind_speed"
-        bathroom_remote_command = "dry"
-        three_btn_switch_left = True
-        three_btn_switch_right = True
-    elif button_type == 6:
-        bathroom_remote_command = "light"
-        three_btn_switch_left = True
-        three_btn_switch_middle = True
-        three_btn_switch_right = True
-    elif button_type == 7:
-        bathroom_remote_command = "swing"
-    elif button_type == 8:
-        bathroom_remote_command = "heat"
-
-    # press_type represents the type of press or rotate
-    # for dimmers, buton_type is used to represent the type of press
-    # for dimmers, value or button_type is used to represent the direction and number
-    # of steps, number of presses or duration of long press
-    button_press_type = "no_press"
-    btn_switch_press_type = None
-    dimmer_value: int = 0
-
-    if press_type == 0:
-        button_press_type = "press"
-        btn_switch_press_type = "press"
-    elif press_type == 1:
-        button_press_type = "double_press"
-        btn_switch_press_type = "long_press"
-    elif press_type == 2:
-        button_press_type = "long_press"
-        btn_switch_press_type = "double_press"
-    elif press_type == 3:
-        if button_type == 0:
-            button_press_type = "press"
-            dimmer_value = value
-        if button_type == 1:
-            button_press_type = "long_press"
-            dimmer_value = value
-    elif press_type == 4:
-        if button_type == 0:
-            if value <= 127:
-                button_press_type = "rotate_right"
-                dimmer_value = value
-            else:
-                button_press_type = "rotate_left"
-                dimmer_value = 256 - value
-        elif button_type <= 127:
-            button_press_type = "rotate_right_pressed"
-            dimmer_value = button_type
-        else:
-            button_press_type = "rotate_left_pressed"
-            dimmer_value = 256 - button_type
-    elif press_type == 5:
-        button_press_type = "press"
-    elif press_type == 6:
-        button_press_type = "long_press"
-
-    # return device specific output
-    if device_type in ["RTCGQ02LM", "YLAI003", "JTYJGD03MI", "SJWS01LM"]:
-        # RTCGQ02LM, JTYJGD03MI, SJWS01LM: press
-        # YLAI003: press, double_press or long_press
-        device.fire_event(
-            key=EventDeviceKeys.BUTTON,
-            event_type=button_press_type,
-            event_properties=None,
-        )
-    elif device_type == "XMMF01JQD":
-        # cube_rotation: rotate_left or rotate_right
-        device.fire_event(
-            key=EventDeviceKeys.CUBE,
-            event_type=cube_rotation,
-            event_properties=None,
-        )
-    elif device_type == "YLYK01YL":
-        # Buttons: on, off, brightness, plus, min, M
-        # Press types: press and long_press
-        if remote_command == "on":
-            device.update_predefined_binary_sensor(BinarySensorDeviceClass.POWER, True)
-        elif remote_command == "off":
-            device.update_predefined_binary_sensor(BinarySensorDeviceClass.POWER, False)
-        device.fire_event(
-            key=f"{str(EventDeviceKeys.BUTTON)}_{remote_command}",
-            event_type=button_press_type,
-            event_properties=None,
-        )
-    elif device_type == "YLYK01YL-FANRC":
-        # Buttons: fan, light, wind_speed, wind_mode, brightness, color_temperature
-        # Press types: press and long_press
-        device.fire_event(
-            key=f"{str(EventDeviceKeys.BUTTON)}_{fan_remote_command}",
-            event_type=button_press_type,
-            event_properties=None,
-        )
-    elif device_type == "YLYK01YL-VENFAN":
-        # Buttons: swing, power, timer_30_minutes, timer_60_minutes,
-        # increase_wind_speed, decrease_wind_speed
-        # Press types: press and long_press
-        device.fire_event(
-            key=f"{str(EventDeviceKeys.BUTTON)}_{ven_fan_remote_command}",
-            event_type=button_press_type,
-            event_properties=None,
-        )
-    elif device_type == "YLYB01YL-BHFRC":
-        # Buttons: heat, air_exchange, dry, fan, swing, decrease_speed, increase_speed,
-        # stop or light
-        # Press types: press and long_press
-        device.fire_event(
-            key=f"{str(EventDeviceKeys.BUTTON)}_{bathroom_remote_command}",
-            event_type=button_press_type,
-            event_properties=None,
-        )
-    elif device_type == "YLKG07YL/YLKG08YL":
-        # Dimmer reports: press, long_press, rotate_left, rotate_right,
-        # rotate_left_pressed  or rotate_right_pressed
-        if button_press_type == "press":
-            # it also reports how many times you pressed the dimmer.
-            event_property = "number_of_presses"
-        elif button_press_type == "long_press":
-            # it also reports the duration (in seconds) you pressed the dimmer
-            event_property = "duration"
-        elif button_press_type in [
-            "rotate_right",
-            "rotate_left",
-            "rotate_right_pressed",
-            "rotate_left_pressed",
-        ]:
-            # it reports how far you rotate, measured in number of `steps`.
-            event_property = "steps"
-        else:
-            event_property = None
-        event_properties = parse_event_properties(
-            event_property=event_property, value=dimmer_value
-        )
-        device.fire_event(
-            key=EventDeviceKeys.DIMMER,
-            event_type=button_press_type,
-            event_properties=event_properties,
-        )
-    elif device_type == "K9B-1BTN":
-        # Press types: press, double_press, long_press
-        if one_btn_switch:
-            device.fire_event(
-                key=EventDeviceKeys.BUTTON,
-                event_type=btn_switch_press_type,
-                event_properties=None,
-            )
-    elif device_type == "K9B-2BTN":
-        # Buttons: left and/or right
-        # Press types: press, double_press, long_press
-        # device can send button press of multiple buttons in one message
-        if two_btn_switch_left:
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_left",
-                event_type=btn_switch_press_type,
-                event_properties=None,
-            )
-        if two_btn_switch_right:
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_right",
-                event_type=btn_switch_press_type,
-                event_properties=None,
-            )
-    elif device_type == "K9B-3BTN":
-        # Buttons: left, middle and/or right
-        # result can be press, double_press or long_press
-        # device can send button press of multiple buttons in one message
-        if three_btn_switch_left:
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_left",
-                event_type=btn_switch_press_type,
-                event_properties=None,
-            )
-        if three_btn_switch_middle:
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_middle",
-                event_type=btn_switch_press_type,
-                event_properties=None,
-            )
-        if three_btn_switch_right:
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_right",
-                event_type=btn_switch_press_type,
-                event_properties=None,
-            )
-    return {}
-
-
-def obj1004(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Temperature"""
-    if len(xobj) == 2:
-        temp = T_STRUCT(xobj)[0]
-        device.update_predefined_sensor(SensorLibrary.TEMPERATURE__CELSIUS, temp / 10)
-    return {}
-
-
-def obj1005(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Power on/off and Temperature"""
-    device.update_predefined_binary_sensor(BinarySensorDeviceClass.POWER, xobj[0])
-    device.update_predefined_sensor(SensorLibrary.TEMPERATURE__CELSIUS, xobj[1])
-    return {}
-
-
-def obj1006(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Humidity"""
-    if len(xobj) == 2:
-        humi = H_STRUCT(xobj)[0]
-        if device_type in ["LYWSD03MMC", "MHO-C401"]:
-            # To handle jagged stair stepping readings from these sensors.
-            # https://github.com/custom-components/ble_monitor/blob/ef2e3944b9c1a635208390b8563710d0eec2a945/custom_components/ble_monitor/sensor.py#L752
-            # https://github.com/esphome/esphome/blob/c39f6d0738d97ecc11238220b493731ec70c701c/esphome/components/gicisky_lywsd03mmc/gicisky_lywsd03mmc.cpp#L44C14-L44C99
-            # https://github.com/custom-components/ble_monitor/issues/7#issuecomment-595948254
-            device.update_predefined_sensor(
-                SensorLibrary.HUMIDITY__PERCENTAGE, int(humi / 10)
-            )
-        else:
-            device.update_predefined_sensor(
-                SensorLibrary.HUMIDITY__PERCENTAGE, humi / 10
-            )
-    return {}
-
-
-def obj1007(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Illuminance"""
-    if len(xobj) == 3:
-        illum = ILL_STRUCT(xobj + b"\x00")[0]
-        if device_type in ["MJYD02YL", "MCCGQ02HL"]:
-            # 100 means light, else dark (0 or 1)
-            # MCCGQ02HL might use obj1018 for light sensor, just added here to be sure.
-            device.update_predefined_binary_sensor(
-                BinarySensorDeviceClass.LIGHT, illum == 100
-            )
-        elif device_type in ["HHCCJCY01", "GCLS002"]:
-            # illumination in lux
-            device.update_predefined_sensor(SensorLibrary.LIGHT__LIGHT_LUX, illum)
-    return {}
-
-
-def obj1008(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Moisture"""
-    device.update_predefined_sensor(SensorLibrary.MOISTURE__PERCENTAGE, xobj[0])
-    return {}
-
-
-def obj1009(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Conductivity"""
-    if len(xobj) == 2:
-        cond = CND_STRUCT(xobj)[0]
-        device.update_predefined_sensor(SensorLibrary.CONDUCTIVITY__CONDUCTIVITY, cond)
-    return {}
-
-
-def obj1010(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Formaldehyde"""
-    if len(xobj) == 2:
-        fmdh = FMDH_STRUCT(xobj)[0]
-        device.update_predefined_sensor(
-            SensorLibrary.FORMALDEHYDE__CONCENTRATION_MILLIGRAMS_PER_CUBIC_METER,
-            fmdh / 100,
-        )
-    return {}
-
-
-def obj1012(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Power on/off"""
-    device.update_predefined_binary_sensor(BinarySensorDeviceClass.POWER, xobj[0])
-    return {}
-
-
-def obj1013(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Consumable (in percent)"""
-    device.update_sensor(
-        key=ExtendedSensorDeviceClass.CONSUMABLE,
-        name="Consumable",
-        native_unit_of_measurement=Units.PERCENTAGE,
-        device_class=ExtendedSensorDeviceClass.CONSUMABLE,
-        native_value=xobj[0],
-    )
-    return {}
-
-
-def obj1014(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Moisture"""
-    device.update_predefined_binary_sensor(
-        BinarySensorDeviceClass.MOISTURE, xobj[0] > 0
-    )
-    return {}
-
-
-def obj1015(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Smoke"""
-    device.update_predefined_binary_sensor(BinarySensorDeviceClass.SMOKE, xobj[0] > 0)
-    return {}
-
-
-def obj1017(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Time in seconds without motion"""
-    if len(xobj) == 4:
-        no_motion_time = M_STRUCT(xobj)[0]
-        # seconds since last motion detected message
-        # 0x1017 is sent 3 seconds after 0x000f, 5 seconds arter 0x1007
-        # and at 60, 120, 300, 600, 1200 and 1800 seconds after last motion.
-        # Anything <= 30 seconds is regarded motion detected in the MiHome app.
-        if no_motion_time <= 30:
-            device.update_predefined_binary_sensor(BinarySensorDeviceClass.MOTION, True)
-        else:
-            device.update_predefined_binary_sensor(
-                BinarySensorDeviceClass.MOTION, False
-            )
-    return {}
-
-
-def obj1018(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Light intensity"""
-    device.update_predefined_binary_sensor(BinarySensorDeviceClass.LIGHT, bool(xobj[0]))
-    return {}
-
-
-def obj1019(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Door/Window sensor"""
-    open_obj = xobj[0]
-    if open_obj == 0:
-        # opened
-        device.update_predefined_binary_sensor(BinarySensorDeviceClass.OPENING, True)
-    elif open_obj == 1:
-        # closed
-        device.update_predefined_binary_sensor(BinarySensorDeviceClass.OPENING, False)
-        device.update_binary_sensor(
-            key=ExtendedBinarySensorDeviceClass.DOOR_LEFT_OPEN,
-            native_value=False,  # reset door left open
-            device_class=ExtendedBinarySensorDeviceClass.DOOR_LEFT_OPEN,
-            name="Door left open",
-        )
-    elif open_obj == 2:
-        # closing timeout
-        device.update_predefined_binary_sensor(BinarySensorDeviceClass.OPENING, True)
-        device.update_binary_sensor(
-            key=ExtendedBinarySensorDeviceClass.DOOR_LEFT_OPEN,
-            native_value=True,
-            device_class=ExtendedBinarySensorDeviceClass.DOOR_LEFT_OPEN,
-            name="Door left open",
-        )
-    elif open_obj == 3:
-        # device reset (not implemented)
-        return {}
-    else:
-        return {}
-    return {}
-
-
-def obj100a(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Battery"""
-    batt = xobj[0]
-    volt = 2.2 + (3.1 - 2.2) * (batt / 100)
-    device.update_predefined_sensor(SensorLibrary.BATTERY__PERCENTAGE, batt)
-    device.update_predefined_sensor(
-        SensorLibrary.VOLTAGE__ELECTRIC_POTENTIAL_VOLT, volt
-    )
-    return {}
-
-
-def obj100d(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Temperature and humidity"""
-    if len(xobj) == 4:
-        (temp, humi) = TH_STRUCT(xobj)
-        device.update_predefined_sensor(SensorLibrary.TEMPERATURE__CELSIUS, temp / 10)
-        device.update_predefined_sensor(SensorLibrary.HUMIDITY__PERCENTAGE, humi / 10)
-    return {}
-
-
-def obj100e(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Lock common attribute"""
-    # https://iot.mi.com/new/doc/accesses/direct-access/embedded-development/ble/object-definition#%E9%94%81%E5%B1%9E%E6%80%A7
-    if len(xobj) == 1:
-        # Unlock by type on some devices
-        if device_type == "DSL-C08":
-            lock_attribute = int.from_bytes(xobj, "little")
-
-            device.update_predefined_binary_sensor(
-                BinarySensorDeviceClass.LOCK, bool(lock_attribute & 0x01 ^ 1)
-            )
-            device.update_binary_sensor(
-                key=ExtendedBinarySensorDeviceClass.CHILDLOCK,
-                native_value=bool(lock_attribute >> 3 ^ 1),
-                device_class=ExtendedBinarySensorDeviceClass.CHILDLOCK,
-                name="Childlock",
-            )
-    return {}
-
-
-def obj101b(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Timeout no movement"""
-    # https://iot.mi.com/new/doc/accesses/direct-access/embedded-development/ble/object-definition#%E9%80%9A%E7%94%A8%E5%B1%9E%E6%80%A7
-    device.update_predefined_binary_sensor(BinarySensorDeviceClass.MOTION, False)
-    return {}
-
-
-def obj2000(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Body temperature"""
-    if len(xobj) == 5:
-        (temp1, temp2, bat) = TTB_STRUCT(xobj)
-        # Body temperature is calculated from the two measured temperatures.
-        # Formula is based on approximation based on values in the app in
-        # the range 36.5 - 37.8.
-        body_temp = (
-            3.71934 * pow(10, -11) * math.exp(0.69314 * temp1 / 100)
-            - (1.02801 * pow(10, -8) * math.exp(0.53871 * temp2 / 100))
-            + 36.413
-        )
-        device.update_predefined_sensor(SensorLibrary.TEMPERATURE__CELSIUS, body_temp)
-        device.update_predefined_sensor(SensorLibrary.BATTERY__PERCENTAGE, bat)
-    return {}
-
-
-def obj3003(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Brushing"""
-    result = {}
-    start_obj = xobj[0]
-    if start_obj == 0:
-        # Start of brushing
-        device.update_binary_sensor(
-            key=ExtendedBinarySensorDeviceClass.TOOTHBRUSH,
-            native_value=True,  # Toothbrush On
-            device_class=ExtendedBinarySensorDeviceClass.TOOTHBRUSH,
-            name="Toothbrush",
-        )
-        # Start time has not been implemented
-        start_time = struct.unpack("<L", xobj[1:5])[0]
-        result["start time"] = datetime.datetime.fromtimestamp(
-            start_time, tz=datetime.timezone.utc
-        ).replace(tzinfo=None)
-    elif start_obj == 1:
-        # End of brushing
-        device.update_binary_sensor(
-            key=ExtendedBinarySensorDeviceClass.TOOTHBRUSH,
-            native_value=False,  # Toothbrush Off
-            device_class=ExtendedBinarySensorDeviceClass.TOOTHBRUSH,
-            name="Toothbrush",
-        )
-        # End time has not been implemented
-        end_time = struct.unpack("<L", xobj[1:5])[0]
-        result["end time"] = datetime.datetime.fromtimestamp(
-            end_time, tz=datetime.timezone.utc
-        ).replace(tzinfo=None)
-    if len(xobj) == 6:
-        device.update_sensor(
-            key=ExtendedSensorDeviceClass.SCORE,
-            name="Score",
-            native_unit_of_measurement=None,
-            device_class=ExtendedSensorDeviceClass.SCORE,
-            native_value=xobj[5],
-        )
-    return result
-
-
-# The following data objects are device specific.
-# https://miot-spec.org/miot-spec-v2/instances?status=all
-def obj4801(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Temperature"""
-    temp = FLOAT_STRUCT(xobj)[0]
-    device.update_predefined_sensor(SensorLibrary.TEMPERATURE__CELSIUS, round(temp, 1))
-    return {}
-
-
-def obj4802(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Humidity"""
-    device.update_predefined_sensor(SensorLibrary.HUMIDITY__PERCENTAGE, xobj[0])
-    return {}
-
-
-def obj4803(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Battery"""
-    device.update_predefined_sensor(SensorLibrary.BATTERY__PERCENTAGE, xobj[0])
-    return {}
-
-
-def obj4804(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Opening (state)"""
-    opening_state = xobj[0]
-    # State of the door/window, used in combination with obj4a12
-    if opening_state == 1:
-        device.update_predefined_binary_sensor(BinarySensorDeviceClass.OPENING, True)
-    elif opening_state == 2:
-        device.update_predefined_binary_sensor(BinarySensorDeviceClass.OPENING, False)
-        device.update_binary_sensor(
-            key=ExtendedBinarySensorDeviceClass.DOOR_LEFT_OPEN,
-            native_value=False,  # reset door left open
-            device_class=ExtendedBinarySensorDeviceClass.DOOR_LEFT_OPEN,
-            name="Door left open",
-        )
-        device.update_binary_sensor(
-            key=ExtendedBinarySensorDeviceClass.DEVICE_FORCIBLY_REMOVED,
-            native_value=False,  # reset device forcibly removed
-            device_class=ExtendedBinarySensorDeviceClass.DEVICE_FORCIBLY_REMOVED,
-            name="Device forcibly removed",
-        )
-    return {}
-
-
-def obj4805(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Illuminance in lux"""
-    illum = FLOAT_STRUCT(xobj)[0]
-    device.update_predefined_sensor(SensorLibrary.LIGHT__LIGHT_LUX, illum)
-    return {}
-
-
-def obj4806(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Moisture"""
-    device.update_predefined_binary_sensor(
-        BinarySensorDeviceClass.MOISTURE, xobj[0] > 0
-    )
-    return {}
-
-
-def obj4808(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Humidity"""
-    humi = FLOAT_STRUCT(xobj)[0]
-    device.update_predefined_sensor(SensorLibrary.HUMIDITY__PERCENTAGE, round(humi, 1))
-    return {}
-
-
-def obj4818(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Time in seconds of no motion"""
-    if len(xobj) == 2:
-        (no_motion_time,) = struct.unpack("<H", xobj)
-        # seconds since last motion detected message
-        # 0 = motion detected
-        # also send at 60, 120, 300, 600, 1200 and 1800 seconds after last motion.
-        # Anything <= 30 seconds is regarded motion detected in the MiHome app.
-        if no_motion_time <= 30:
-            device.update_predefined_binary_sensor(BinarySensorDeviceClass.MOTION, True)
-        else:
-            device.update_predefined_binary_sensor(
-                BinarySensorDeviceClass.MOTION, False
-            )
-    return {}
-
-
-def obj484e(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """From miot-spec: occupancy-status: uint8: 0 - No One, 1 - Has One"""
-    """Translate to: occupancy: bool: 0 - Clear, 1 - Detected"""
-    device.update_predefined_binary_sensor(
-        BinarySensorDeviceClass.OCCUPANCY, xobj[0] > 0
-    )
-    return {}
-
-
-def obj4851(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """From miot-spec: has-someone-duration: uint8: 2 - 2 minutes, 5 - 5 minutes"""
-    """Translate to: duration_detected: uint8: 2 - 2 minutes, 5 - 5 minutes"""
-    device.update_sensor(
-        key=ExtendedSensorDeviceClass.DURATION_DETECTED,
-        name="Duration detected",
-        native_unit_of_measurement=Units.TIME_MINUTES,
-        device_class=ExtendedSensorDeviceClass.DURATION_DETECTED,
-        native_value=xobj[0],
-    )
-    return {}
-
-
-def obj4852(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """From miot-spec: no-one-duration: uint8: 2/5/10/30 - 2/5/10/30 minutes"""
-    """Translate to: duration_cleared: uint8: 2/5/10/30 - 2/5/10/30 minutes"""
-    device.update_sensor(
-        key=ExtendedSensorDeviceClass.DURATION_CLEARED,
-        name="Duration cleared",
-        native_unit_of_measurement=Units.TIME_MINUTES,
-        device_class=ExtendedSensorDeviceClass.DURATION_CLEARED,
-        native_value=xobj[0],
-    )
-    return {}
-
-
-def obj4a01(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Low Battery"""
-    device.update_predefined_binary_sensor(BinarySensorDeviceClass.BATTERY, xobj[0])
-    return {}
-
-
-def obj4a08(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Motion detected with Illuminance in lux"""
-    (illum,) = struct.unpack("f", xobj)
-    device.update_predefined_binary_sensor(BinarySensorDeviceClass.MOTION, True)
-    device.update_predefined_sensor(SensorLibrary.LIGHT__LIGHT_LUX, illum)
-    return {}
-
-
-def obj4a0c(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Single press"""
-    if device_type == "XMWS01XS":
-        press = xobj[0]
-        if press == 0:
-            # left button
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_left",
-                event_type="press",
-                event_properties=None,
-            )
-        elif press == 1:
-            # right button
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_right",
-                event_type="press",
-                event_properties=None,
-            )
-    else:
-        device.fire_event(
-            key=EventDeviceKeys.BUTTON,
-            event_type="press",
-            event_properties=None,
-        )
-
-    return {}
-
-
-def obj4a0d(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Double press"""
-    if device_type == "XMWS01XS":
-        press = xobj[0]
-        if press == 0:
-            # left button
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_left",
-                event_type="double_press",
-                event_properties=None,
-            )
-        elif press == 1:
-            # right button
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_right",
-                event_type="double_press",
-                event_properties=None,
-            )
-    else:
-        device.fire_event(
-            key=EventDeviceKeys.BUTTON,
-            event_type="double_press",
-            event_properties=None,
-        )
-
-    return {}
-
-
-def obj4a0e(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Long press"""
-    if device_type == "XMWS01XS":
-        press = xobj[0]
-        if press == 0:
-            # left button
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_left",
-                event_type="long_press",
-                event_properties=None,
-            )
-        elif press == 1:
-            # right button
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_right",
-                event_type="long_press",
-                event_properties=None,
-            )
-    else:
-        device.fire_event(
-            key=EventDeviceKeys.BUTTON,
-            event_type="long_press",
-            event_properties=None,
-        )
-
-    return {}
-
-
-def obj4a0f(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Device forcibly removed"""
-    dev_forced = xobj[0]
-    if dev_forced == 1:
-        device.update_predefined_binary_sensor(BinarySensorDeviceClass.OPENING, True)
-        device.update_binary_sensor(
-            key=ExtendedBinarySensorDeviceClass.DEVICE_FORCIBLY_REMOVED,
-            native_value=True,
-            device_class=ExtendedBinarySensorDeviceClass.DEVICE_FORCIBLY_REMOVED,
-            name="Device forcibly removed",
-        )
-    return {}
-
-
-def obj4a12(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Opening (event)"""
-    opening_state = xobj[0]
-    # Opening event, used in combination with obj4804
-    if opening_state == 1:
-        device.update_predefined_binary_sensor(BinarySensorDeviceClass.OPENING, True)
-    elif opening_state == 2:
-        device.update_predefined_binary_sensor(BinarySensorDeviceClass.OPENING, False)
-        device.update_binary_sensor(
-            key=ExtendedBinarySensorDeviceClass.DOOR_LEFT_OPEN,
-            native_value=False,
-            device_class=ExtendedBinarySensorDeviceClass.DOOR_LEFT_OPEN,
-            name="Door left open",
-        )
-        device.update_binary_sensor(
-            key=ExtendedBinarySensorDeviceClass.DEVICE_FORCIBLY_REMOVED,
-            native_value=False,  # reset device forcibly removed
-            device_class=ExtendedBinarySensorDeviceClass.DEVICE_FORCIBLY_REMOVED,
-            name="Device forcibly removed",
-        )
-    return {}
-
-
-def obj4a13(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Button press (MS1BB(MI))"""
-    press = xobj[0]
-    if press == 1:
-        device.fire_event(
-            key=EventDeviceKeys.BUTTON,
-            event_type="press",
-            event_properties=None,
-        )
-    return {}
-
-
-def obj4a1a(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Door left open"""
-    if xobj[0] == 1:
-        device.update_predefined_binary_sensor(BinarySensorDeviceClass.OPENING, True)
-        device.update_binary_sensor(
-            key=ExtendedBinarySensorDeviceClass.DOOR_LEFT_OPEN,
-            native_value=False,
-            device_class=ExtendedBinarySensorDeviceClass.DOOR_LEFT_OPEN,
-            name="Door left open",
-        )
-    return {}
-
-
-def obj4c01(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Temperature"""
-    if len(xobj) == 4:
-        temp = FLOAT_STRUCT(xobj)[0]
-        device.update_predefined_sensor(
-            SensorLibrary.TEMPERATURE__CELSIUS, round(temp, 2)
-        )
-    return {}
-
-
-def obj4c02(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Humidity"""
-    if len(xobj) == 1:
-        humi = xobj[0]
-        device.update_predefined_sensor(SensorLibrary.HUMIDITY__PERCENTAGE, humi)
-    return {}
-
-
-def obj4c03(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Battery"""
-    device.update_predefined_sensor(SensorLibrary.BATTERY__PERCENTAGE, xobj[0])
-    return {}
-
-
-def obj4c08(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Humidity"""
-    if len(xobj) == 4:
-        humi = FLOAT_STRUCT(xobj)[0]
-        device.update_predefined_sensor(SensorLibrary.HUMIDITY__PERCENTAGE, humi)
-    return {}
-
-
-def obj4c14(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Mode"""
-    mode = xobj[0]
-    return {"mode": mode}
-
-
-def obj4e01(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Low Battery"""
-    device.update_predefined_binary_sensor(BinarySensorDeviceClass.BATTERY, xobj[0])
-    return {}
-
-
-def obj4e0c(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Button press"""
-    if device_type == "XMWXKG01YL":
-        press = xobj[0]
-        if press == 1:
-            # left button
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_left",
-                event_type="press",
-                event_properties=None,
-            )
-        elif press == 2:
-            # right button
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_right",
-                event_type="press",
-                event_properties=None,
-            )
-        elif press == 3:
-            # both left and right button
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_left",
-                event_type="press",
-                event_properties=None,
-            )
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_right",
-                event_type="press",
-                event_properties=None,
-            )
-    elif device_type == "K9BB-1BTN":
-        press = xobj[0]
-        if press == 1:
-            device.fire_event(
-                key=EventDeviceKeys.BUTTON,
-                event_type="press",
-                event_properties=None,
-            )
-        elif press == 8:
-            device.fire_event(
-                key=EventDeviceKeys.BUTTON,
-                event_type="long_press",
-                event_properties=None,
-            )
-        elif press == 15:
-            device.fire_event(
-                key=EventDeviceKeys.BUTTON,
-                event_type="double_press",
-                event_properties=None,
-            )
-    elif device_type == "XMWXKG01LM":
-        device.fire_event(
-            key=EventDeviceKeys.BUTTON,
-            event_type="press",
-            event_properties=None,
-        )
-    return {}
-
-
-def obj4e0d(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Double Press"""
-    if device_type == "XMWXKG01YL":
-        press = xobj[0]
-        if press == 1:
-            # left button
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_left",
-                event_type="double_press",
-                event_properties=None,
-            )
-        elif press == 2:
-            # right button
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_right",
-                event_type="double_press",
-                event_properties=None,
-            )
-        elif press == 3:
-            # both left and right button
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_left",
-                event_type="double_press",
-                event_properties=None,
-            )
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_right",
-                event_type="double_press",
-                event_properties=None,
-            )
-    elif device_type == "XMWXKG01LM":
-        device.fire_event(
-            key=EventDeviceKeys.BUTTON,
-            event_type="double_press",
-            event_properties=None,
-        )
-    return {}
-
-
-def obj4e0e(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Long Press"""
-    if device_type == "XMWXKG01YL":
-        press = xobj[0]
-        if press == 1:
-            # left button
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_left",
-                event_type="long_press",
-                event_properties=None,
-            )
-        elif press == 2:
-            # right button
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_right",
-                event_type="long_press",
-                event_properties=None,
-            )
-        elif press == 3:
-            # both left and right button
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_left",
-                event_type="long_press",
-                event_properties=None,
-            )
-            device.fire_event(
-                key=f"{str(EventDeviceKeys.BUTTON)}_right",
-                event_type="long_press",
-                event_properties=None,
-            )
-    elif device_type == "XMWXKG01LM":
-        device.fire_event(
-            key=EventDeviceKeys.BUTTON,
-            event_type="long_press",
-            event_properties=None,
-        )
-    return {}
-
-
-def obj4e1c(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Device reset"""
-    return {"device reset": True}
-
-
-def obj5003(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Battery"""
-    device.update_predefined_sensor(SensorLibrary.BATTERY__PERCENTAGE, xobj[0])
-    return {}
-
-
-def obj5414(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Device mode (KSI and KSIBP, not used in HA)"""
-    return {"mode": xobj[0]}
-
-
-def obj560c(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Button press"""
-    if device_type not in ["KS1", "KS1BP"]:
-        return {}
-    button = xobj[0]
-    if button_name := QUAD_BUTTON_TO_NAME[button]:
-        device.fire_event(
-            key=f"{str(EventDeviceKeys.BUTTON)}_{button_name}",
-            event_type="press",
-            event_properties=None,
-        )
-    return {}
-
-
-def obj560d(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Double button press"""
-    if device_type not in ["KS1", "KS1BP"]:
-        return {}
-    button = xobj[0]
-    if button_name := QUAD_BUTTON_TO_NAME[button]:
-        device.fire_event(
-            key=f"{str(EventDeviceKeys.BUTTON)}_{button_name}",
-            event_type="double_press",
-            event_properties=None,
-        )
-    return {}
-
-
-def obj560e(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Long button press"""
-    if device_type not in ["KS1", "KS1BP"]:
-        return {}
-    button = xobj[0]
-    if button_name := QUAD_BUTTON_TO_NAME[button]:
-        device.fire_event(
-            key=f"{str(EventDeviceKeys.BUTTON)}_{button_name}",
-            event_type="long_press",
-            event_properties=None,
-        )
-    return {}
-
-
-def obj6e16(
-    xobj: bytes, device: GiciskyBluetoothDeviceData, device_type: str
-) -> dict[str, Any]:
-    """Body Composition Scale S400"""
-    (profile_id, data, _) = struct.unpack("<BII", xobj)
-    if not data:
-        return {}
-    mass = data & 0x7FF
-    heart_rate = (data >> 11) & 0x7F
-    impedance = data >> 18
-    if mass != 0:
-        device.update_predefined_sensor(SensorLibrary.MASS__MASS_KILOGRAMS, mass / 10)
-    if 0 < heart_rate < 127:
-        device.update_sensor(
-            key=ExtendedSensorDeviceClass.HEART_RATE,
-            name="Heart Rate",
-            device_class=ExtendedSensorDeviceClass.HEART_RATE,
-            native_unit_of_measurement="bpm",
-            native_value=heart_rate + 50,
-        )
-    if impedance != 0:
-        if mass != 0:
-            device.update_predefined_sensor(
-                SensorLibrary.IMPEDANCE__OHM, impedance / 10
-            )
-        else:
-            device.update_sensor(
-                key=ExtendedSensorDeviceClass.IMPEDANCE_LOW,
-                name="Impedance Low",
-                device_class=ExtendedSensorDeviceClass.IMPEDANCE_LOW,
-                native_unit_of_measurement=Units.OHM,
-                native_value=impedance / 10,
-            )
-    device.update_sensor(
-        key=ExtendedSensorDeviceClass.PROFILE_ID,
-        name="Profile ID",
-        device_class=ExtendedSensorDeviceClass.PROFILE_ID,
-        native_unit_of_measurement=None,
-        native_value=profile_id,
-    )
-    return {}
-
-
-# Dataobject dictionary
-# {dataObject_id: (converter}
-gicisky_dataobject_dict = {
-    0x0003: obj0003,
-
-}
-
-
-def decode_temps(packet_value: int) -> float:
-    """Decode potential negative temperatures."""
-    # https://github.com/Thrilleratplay/GiciskyWatcher/issues/2
-    if packet_value & 0x800000:
-        return float((packet_value ^ 0x800000) / -10000)
-    return float(packet_value / 10000)
-
-
-def decode_temps_probes(packet_value: int) -> float:
-    """Filter potential negative temperatures."""
-    if packet_value < 0:
-        return 0.0
-    return float(packet_value / 100)
+        return None
 
 
 class GiciskyBluetoothDeviceData(BluetoothData):
-    """Data for Gicisky BLE sensors."""
+    """Data for BTHome Bluetooth devices."""
 
     def __init__(self, bindkey: bytes | None = None) -> None:
         super().__init__()
@@ -1687,6 +126,27 @@ class GiciskyBluetoothDeviceData(BluetoothData):
         # Data that we know how to parse but don't yet map to the SensorData model.
         self.unhandled: dict[str, Any] = {}
 
+        # Encryption to expect, based on flags in the UUID.
+        self.encryption_scheme = EncryptionScheme.NONE
+
+        # The encryption counter can be used to verify that the counter of encrypted
+        # advertisements is increasing, to have some replay protection. We always
+        # start at zero allow the first message after a restart.
+        self.encryption_counter = 0.0
+
+        # The packet_id is used to filter duplicate messages in BTHome V2.
+        self.packet_id: float | None = None
+
+        # If True then we have used the provided encryption key to decrypt at least
+        # one payload.
+        # If False then we have either not seen an encrypted payload, the key is wrong
+        # or encryption is not in use
+        self.bindkey_verified = False
+
+        # If True then the decryption has failed or has not been verified yet.
+        # If False then the decryption has succeeded.
+        self.decryption_failed = True
+
         # If this is True, then we have not seen an advertisement with a payload
         # Until we see a payload, we can't tell if this device is encrypted or not
         self.pending = True
@@ -1694,33 +154,29 @@ class GiciskyBluetoothDeviceData(BluetoothData):
         # The last service_info we saw that had a payload
         # We keep this to help in reauth flows where we want to reprocess and old
         # value with a new bindkey.
-        self.last_service_info: BluetoothServiceInfo | None = None
+        self.last_service_info: BluetoothServiceInfoBleak | None = None
 
-        # If this is True, the device is not sending advertisements
-        # in a regular interval
+        # If this is True, the device is not sending advertisements in a regular interval
         self.sleepy_device = False
+
+        self.device: DeviceEntry | None = None
 
     def set_bindkey(self, bindkey: bytes | None) -> None:
         """Set the bindkey."""
+        self.bindkey = bindkey
         if bindkey:
-            if len(bindkey) == 12:
-                # MiBeacon v2/v3 bindkey (requires 4 additional (fixed) bytes)
-                bindkey = b"".join(
-                    [bindkey[0:6], bytes.fromhex("8d3d3c97"), bindkey[6:]]
-                )
-            elif len(bindkey) == 16:
-                self.cipher: AESCCM | None = AESCCM(bindkey, tag_length=4)
+            self.cipher: AESCCM | None = AESCCM(bindkey, tag_length=4)
         else:
             self.cipher = None
-        self.bindkey = bindkey
 
-    def supported(self, data: BluetoothServiceInfo) -> bool:
+    def supported(self, data: BluetoothServiceInfoBleak) -> bool:
         if not super().supported(data):
             return False
         return True
 
-    def _start_update(self, service_info: BluetoothServiceInfo) -> None:
+    def _start_update(self, service_info: BluetoothServiceInfoBleak) -> None:
         """Update from BLE advertisement data."""
+        _LOGGER.info("Parsing Gicisky BLE advertisement data: %s", service_info)
         if 0x5053 in service_info.manufacturer_data:
             #_LOGGER.info("BLE Info: %s", service_info)
             data = service_info.manufacturer_data[0x5053]
@@ -1728,34 +184,7 @@ class GiciskyBluetoothDeviceData(BluetoothData):
                 #_LOGGER.info("Gicisky %s BLE UUID %s data: %s", service_info.name, uuid, data.hex())
                 if self._parse_gicisky(service_info, data):
                     self.last_service_info = service_info
-
-
-    def _parse_hhcc(self, service_info: BluetoothServiceInfo, data: bytes) -> bool:
-        """Parser for Pink version of HHCCJCY10."""
-        if len(data) != 9:
-            return False
-
-        identifier = short_address(service_info.address)
-        self.set_title(f"Plant Sensor {identifier} (HHCCJCY10)")
-        self.set_device_name(f"Plant Sensor {identifier}")
-        self.set_device_type("HHCCJCY10")
-        self.set_device_manufacturer("HHCC Plant Technology Co. Ltd")
-
-        xvalue_1 = data[0:3]
-        (moist, temp) = struct.unpack(">BH", xvalue_1)
-        self.update_predefined_sensor(SensorLibrary.TEMPERATURE__CELSIUS, temp / 10)
-        self.update_predefined_sensor(SensorLibrary.MOISTURE__PERCENTAGE, moist)
-
-        xvalue_2 = data[3:6]
-        (illu,) = struct.unpack(">i", b"\x00" + xvalue_2)
-        self.update_predefined_sensor(SensorLibrary.LIGHT__LIGHT_LUX, illu)
-
-        xvalue_3 = data[6:9]
-        (batt, cond) = struct.unpack(">BH", xvalue_3)
-        self.update_predefined_sensor(SensorLibrary.BATTERY__PERCENTAGE, batt)
-        self.update_predefined_sensor(SensorLibrary.CONDUCTIVITY__CONDUCTIVITY, cond)
-
-        return True
+        return None
 
     def _parse_gicisky(
         self, service_info: BluetoothServiceInfo, data: bytes
@@ -1774,6 +203,7 @@ class GiciskyBluetoothDeviceData(BluetoothData):
             _LOGGER.info("Unknown Gicisky device found. Data: %s", data.hex())
             return False
 
+        self.device = device
         device_type = device.model
 
         self.device_id = device_id
@@ -1793,137 +223,504 @@ class GiciskyBluetoothDeviceData(BluetoothData):
             SensorLibrary.VOLTAGE__ELECTRIC_POTENTIAL_VOLT, round(volt, 1)
         )
         return True
+    
+    def _parse_bthome_v1(
+        self, service_info: BluetoothServiceInfoBleak, service_data: bytes
+    ) -> bool:
+        """Parser for BTHome sensors version V1"""
+        identifier = short_address(service_info.address)
+        name = service_info.name
+        sw_version = 1
 
-    def _parse_scale_v1(self, service_info: BluetoothServiceInfo, data: bytes) -> bool:
-        if len(data) != 10:
+        # Remove identifier from ATC sensors.
+        atc_identifier = (
+            service_info.address.replace("-", "").replace(":", "")[-6:].upper()
+        )
+        if name[-6:] == atc_identifier:
+            name = name[:-6].rstrip(" _")
+
+        # Try to get manufacturer
+        if name.startswith(("ATC", "LYWSD03MMC")):
+            manufacturer = "Xiaomi"
+        elif name.startswith("prst"):
+            manufacturer = "b-parasite"
+            name = "b-parasite"
+        else:
+            manufacturer = None
+
+        if manufacturer:
+            self.set_device_manufacturer(manufacturer)
+
+        self.set_device_name(f"{name} {identifier}")
+        self.set_title(f"{name} {identifier}")
+        self.set_device_type("BTHome sensor")
+
+        uuid16 = list(service_info.service_data.keys())
+        if "0000181c-0000-1000-8000-00805f9b34fb" in uuid16:
+            # Non-encrypted BTHome BLE format
+            self.encryption_scheme = EncryptionScheme.NONE
+            self.set_device_sw_version("BTHome BLE v1")
+            payload = service_data
+        elif "0000181e-0000-1000-8000-00805f9b34fb" in uuid16:
+            # Encrypted BTHome BLE format
+            self.encryption_scheme = EncryptionScheme.BTHOME_BINDKEY
+            self.set_device_sw_version("BTHome BLE v1 (encrypted)")
+            mac_readable = service_info.address
+            source_mac = bytes.fromhex(mac_readable.replace(":", ""))
+
+            try:
+                payload = self._decrypt_bthome(
+                    service_info, service_data, source_mac, sw_version
+                )
+            except (ValueError, TypeError):
+                return True
+        else:
             return False
 
-        uuid16 = (data[3] << 8) | data[2]
+        return self._parse_payload(payload, sw_version, service_info.time)
 
+    def _parse_bthome_v2(
+        self, service_info: BluetoothServiceInfoBleak, service_data: bytes
+    ) -> bool:
+        """Parser for BTHome sensors version V2"""
         identifier = short_address(service_info.address)
+        name = service_info.name
 
-        self.device_id = uuid16
-        self.set_title(f"Mi Smart Scale ({identifier})")
-        self.set_device_name(f"Mi Smart Scale ({identifier})")
-        self.set_device_type("XMTZC01HM/XMTZC04HM")
-        self.set_device_manufacturer("Gicisky")
-        self.pending = False
-        self.sleepy_device = True
+        if name == service_info.address:
+            name = "BTHome sensor"
 
-        control_byte = data[0]
-        mass = float(int.from_bytes(data[1:3], byteorder="little"))
-
-        mass_in_pounds = bool(int(control_byte & (1 << 0)))
-        mass_in_catty = bool(int(control_byte & (1 << 4)))
-        mass_in_kilograms = not mass_in_catty and not mass_in_pounds
-        mass_stabilized = bool(int(control_byte & (1 << 5)))
-        mass_removed = bool(int(control_byte & (1 << 7)))
-
-        if mass_in_kilograms:
-            # sensor advertises kg * 200
-            mass /= 200
-        elif mass_in_pounds:
-            # sensor advertises lbs * 100, conversion to kg (1 lbs = 0.45359237 kg)
-            mass *= 0.0045359237
-        else:
-            # sensor advertises catty * 100, conversion to kg (1 catty = 0.5 kg)
-            mass *= 0.005
-
-        self.update_predefined_sensor(
-            SensorLibrary.MASS_NON_STABILIZED__MASS_KILOGRAMS, mass
+        # Remove identifier from ATC sensors name.
+        atc_identifier = (
+            service_info.address.replace("-", "").replace(":", "")[-6:].upper()
         )
-        if mass_stabilized and not mass_removed:
-            self.update_predefined_sensor(SensorLibrary.MASS__MASS_KILOGRAMS, mass)
+        if name[-6:] == atc_identifier:
+            name = name[:-6].rstrip(" _")
 
-        return True
+        adv_info = service_data[0]
 
-    def _parse_scale_v2(self, service_info: BluetoothServiceInfo, data: bytes) -> bool:
-        if len(data) != 13:
+        # Determine if encryption is used
+        encryption = adv_info & (1 << 0)  # bit 0
+        if encryption == 1:
+            self.encryption_scheme = EncryptionScheme.BTHOME_BINDKEY
+        else:
+            self.encryption_scheme = EncryptionScheme.NONE
+
+        # If True, the first 6 bytes contain the mac address
+        mac_included = adv_info & (1 << 1)  # bit 1
+        if mac_included:
+            bthome_mac_reversed = service_data[1:7]
+            mac_readable = to_mac(bthome_mac_reversed[::-1])
+            payload = service_data[7:]
+        else:
+            mac_readable = service_info.address
+            payload = service_data[1:]
+
+        # If True, the device is only updating when triggered
+        self.sleepy_device = bool(adv_info & (1 << 2))  # bit 2
+
+        # Check BTHome version
+        sw_version = (adv_info >> 5) & 7  # 3 bits (5-7)
+        if sw_version == 2:
+            if self.encryption_scheme == EncryptionScheme.BTHOME_BINDKEY:
+                self.set_device_sw_version(f"BTHome BLE v{sw_version} (encrypted)")
+            else:
+                self.set_device_sw_version(f"BTHome BLE v{sw_version}")
+        else:
+            _LOGGER.error(
+                "%s: Sensor is set to use BTHome version %s, which is not existing. "
+                "Please modify the version in the first byte of the service data",
+                identifier,
+                sw_version,
+            )
             return False
 
-        uuid16 = (data[3] << 8) | data[2]
-
-        identifier = short_address(service_info.address)
-
-        self.device_id = uuid16
-        self.set_title(f"Mi Body Composition Scale ({identifier})")
-        self.set_device_name(f"Mi Body Composition Scale ({identifier})")
-        self.set_device_type("XMTZC02HM/XMTZC05HM/NUN4049CN")
-        self.set_device_manufacturer("Gicisky")
-        self.pending = False
-        self.sleepy_device = True
-
-        control_bytes = data[:2]
-        # skip bytes containing date and time
-        impedance = int.from_bytes(data[9:11], byteorder="little")
-        mass = float(int.from_bytes(data[11:13], byteorder="little"))
-
-        # Decode control bytes
-        control_flags = "".join([bin(byte)[2:].zfill(8) for byte in control_bytes])
-
-        mass_in_pounds = bool(int(control_flags[7]))
-        mass_in_catty = bool(int(control_flags[9]))
-        mass_in_kilograms = not mass_in_catty and not mass_in_pounds
-        mass_stabilized = bool(int(control_flags[10]))
-        mass_removed = bool(int(control_flags[8]))
-        impedance_stabilized = bool(int(control_flags[14]))
-
-        if mass_in_kilograms:
-            # sensor advertises kg * 200
-            mass /= 200
-        elif mass_in_pounds:
-            # sensor advertises lbs * 100, conversion to kg (1 lbs = 0.45359237 kg)
-            mass *= 0.0045359237
+        # Try to get manufacturer based on the name
+        if name.startswith(("ATC", "LYWSD03MMC")):
+            manufacturer = "Xiaomi"
+            device_type = "Temperature/Humidity sensor"
+        elif name.startswith("prst"):
+            manufacturer = "b-parasite"
+            name = "b-parasite"
+            device_type = "Plant sensor"
+        elif name.startswith("SBBT"):
+            manufacturer = "Shelly"
+            name = "Shelly BLU Button1"
+            device_type = "BLU Button1"
+        elif name.startswith("SBDW"):
+            manufacturer = "Shelly"
+            name = "Shelly BLU Door/Window"
+            device_type = "BLU Door/Window"
         else:
-            # sensor advertises catty * 100, conversion to kg (1 catty = 0.5 kg)
-            mass *= 0.005
+            manufacturer = None
+            device_type = "BTHome sensor"
 
-        self.update_predefined_sensor(
-            SensorLibrary.MASS_NON_STABILIZED__MASS_KILOGRAMS, mass
-        )
-        if mass_stabilized and not mass_removed:
-            self.update_predefined_sensor(SensorLibrary.MASS__MASS_KILOGRAMS, mass)
-            if impedance_stabilized:
-                self.update_predefined_sensor(SensorLibrary.IMPEDANCE__OHM, impedance)
+        if manufacturer:
+            self.set_device_manufacturer(manufacturer)
 
-        return True
+        # Get device information from local name and identifier
+        self.set_device_name(f"{name} {identifier}")
+        self.set_title(f"{name} {identifier}")
+        self.set_device_type(device_type)
 
+        if self.encryption_scheme == EncryptionScheme.BTHOME_BINDKEY:
+            bthome_mac = bytes.fromhex(mac_readable.replace(":", ""))
+            # Decode encrypted payload
+            try:
+                payload = self._decrypt_bthome(
+                    service_info, payload, bthome_mac, sw_version, adv_info
+                )
+            except (ValueError, TypeError):
+                return True
 
-    def poll_needed(
-        self, service_info: BluetoothServiceInfo, last_poll: float | None
+        return self._parse_payload(payload, sw_version, service_info.time)
+
+    def _skip_old_or_duplicated_advertisement(
+        self, new_packet_id: float, adv_time: float
     ) -> bool:
         """
-        This is called every time we get a service_info for a device. It means the
-        device is working and online. If 24 hours has passed, it may be a good
-        time to poll the device.
-        """
-        if self.pending:
-            # Never need to poll if we are pending as we don't even know what
-            # kind of device we are
-            return False
+        Detect duplicated or older packets
 
-        if self.device_id not in [0x03BC, 0x0098]:
-            return False
-
-        return not last_poll or last_poll > TIMEOUT_1DAY
-
-    async def async_poll(self, ble_device: BLEDevice) -> SensorUpdate:
+        Devices may send duplicated advertisements or advertisements order can change
+        when passing through a proxy. If more than 4 seconds pass since the last
+        advertisement assume it is a new packet even if it has the same packet id.
+        Packet id rollover at 255 to 0, validate that the difference between last packet id
+        and new packet id is less than 64. This assumes device is not sending more than 16
+        advertisements per second.
         """
-        Poll the device to retrieve any values we can't get from passive listening.
-        """
-        if self.device_id in [0x03BC, 0x0098]:
-            client = await establish_connection(
-                BleakClient, ble_device, ble_device.address
+        last_packet_id = self.packet_id
+
+        # no history, first packet, don't discard packet
+        if last_packet_id is None or self.last_service_info is None:
+            _LOGGER.debug(
+                "%s: First packet, not filtering packet_id %i",
+                self.title,
+                new_packet_id,
             )
-            try:
-                battery_char = client.services.get_characteristic(
-                    CHARACTERISTIC_BATTERY
+            return False
+
+        # more than 4 seconds since last packet, don't discard packet
+        if adv_time - self.last_service_info.time > 4:
+            _LOGGER.debug(
+                "%s: Not filtering packet_id, more than 4 seconds since last packet. "
+                "New time: %i, Old time: %i",
+                self.title,
+                adv_time,
+                self.last_service_info.time,
+            )
+            return False
+
+        # distance between new packet and old packet is less then 64
+        if (new_packet_id > last_packet_id and new_packet_id - last_packet_id < 64) or (
+            new_packet_id < last_packet_id and new_packet_id + 256 - last_packet_id < 64
+        ):
+            return False
+
+        # discard packet (new_packet_id=last_packet_id or older packet)
+        _LOGGER.debug(
+            "%s: New packet_id %i indicates an older packet (previous packet_id %i). "
+            "BLE advertisement will be skipped",
+            self.title,
+            new_packet_id,
+            last_packet_id,
+        )
+        return True
+
+    def _parse_payload(self, payload: bytes, sw_version: int, adv_time: float) -> bool:
+        payload_length = len(payload)
+        next_obj_start = 0
+        prev_obj_meas_type = 0
+        result = False
+        measurements: list[dict[str, Any]] = []
+        postfix_dict: dict[str, int] = {}
+        obj_data_format: str | int
+
+        # Create a list with all individual objects
+        while payload_length >= next_obj_start + 1:
+            obj_start = next_obj_start
+
+            if sw_version == 1:
+                # BTHome V1
+                obj_meas_type = payload[obj_start + 1]
+                obj_control_byte = payload[obj_start]
+                obj_data_length = (obj_control_byte >> 0) & 31  # 5 bits (0-4)
+                obj_data_format = (obj_control_byte >> 5) & 7  # 3 bits (5-7)
+                obj_data_start = obj_start + 2
+                next_obj_start = obj_start + obj_data_length + 1
+            else:
+                # BTHome V2
+                obj_meas_type = payload[obj_start]
+                if prev_obj_meas_type > obj_meas_type:
+                    _LOGGER.warning(
+                        "%s: BTHome device is not sending object ids in numerical order (from low "
+                        "to high object id). This can cause issues with your BTHome receiver, "
+                        "payload: %s",
+                        self.title,
+                        payload.hex(),
+                    )
+                if obj_meas_type not in MEAS_TYPES:
+                    _LOGGER.debug(
+                        "%s: Invalid Object ID found in payload: %s",
+                        self.title,
+                        payload.hex(),
+                    )
+                    break
+                prev_obj_meas_type = obj_meas_type
+                obj_data_format = MEAS_TYPES[obj_meas_type].data_format
+
+                if obj_data_format in ["raw", "string"]:
+                    obj_data_length = payload[obj_start + 1]
+                    obj_data_start = obj_start + 2
+                else:
+                    obj_data_length = MEAS_TYPES[obj_meas_type].data_length
+                    obj_data_start = obj_start + 1
+                next_obj_start = obj_data_start + obj_data_length
+
+            if obj_data_length == 0:
+                _LOGGER.debug(
+                    "%s: Invalid payload data length found with length 0, payload: %s",
+                    self.title,
+                    payload.hex(),
                 )
-                payload = await client.read_gatt_char(battery_char)
-            finally:
-                await client.disconnect()
+                continue
 
-            self.set_device_sw_version(payload[2:].decode("utf-8"))
-            self.update_predefined_sensor(SensorLibrary.BATTERY__PERCENTAGE, payload[0])
+            if payload_length < next_obj_start:
+                _LOGGER.debug(
+                    "%s: Invalid payload data length, payload: %s",
+                    self.title,
+                    payload.hex(),
+                )
+                break
 
-        return self._finish_update()
+            # Filter BLE advertisements with packet_id that has already been parsed.
+            if obj_meas_type == 0:
+                new_packet_id = parse_uint(payload[obj_data_start:next_obj_start])
+                if self._skip_old_or_duplicated_advertisement(new_packet_id, adv_time):
+                    break
+                self.packet_id = new_packet_id
+
+            measurements.append(
+                {
+                    "data format": obj_data_format,
+                    "data length": obj_data_length,
+                    "measurement type": obj_meas_type,
+                    "measurement data": payload[obj_data_start:next_obj_start],
+                    "device id": None,
+                }
+            )
+
+        # Get a list of measurement types that are included more than once.
+        seen_meas_formats = set()
+        dup_meas_formats = set()
+        for meas in measurements:
+            if meas["measurement type"] in MEAS_TYPES:
+                meas_format = MEAS_TYPES[meas["measurement type"]].meas_format
+                if meas_format in seen_meas_formats:
+                    dup_meas_formats.add(meas_format)
+                else:
+                    seen_meas_formats.add(meas_format)
+
+        # Parse each object into readable information
+        for meas in measurements:
+            if meas["measurement type"] not in MEAS_TYPES:
+                _LOGGER.debug(
+                    "%s: UNKNOWN measurement type %s in BTHome BLE payload! Adv: %s",
+                    self.title,
+                    meas["measurement type"],
+                    payload.hex(),
+                )
+                continue
+
+            meas_type = MEAS_TYPES[meas["measurement type"]]
+            meas_format = meas_type.meas_format
+            meas_factor = meas_type.factor
+
+            if meas_type.meas_format in dup_meas_formats:
+                # Add a postfix for advertisements with multiple measurements of the same type
+                postfix_counter = postfix_dict.get(meas_format, 0) + 1
+                postfix_dict[meas_format] = postfix_counter
+                postfix = f"_{postfix_counter}"
+            else:
+                postfix = ""
+
+            value: None | str | int | float | datetime
+            if meas["data format"] == 0 or meas["data format"] == "unsigned_integer":
+                value = parse_uint(meas["measurement data"], meas_factor)
+            elif meas["data format"] == 1 or meas["data format"] == "signed_integer":
+                value = parse_int(meas["measurement data"], meas_factor)
+            elif meas["data format"] == 2 or meas["data format"] == "float":
+                value = parse_float(meas["measurement data"], meas_factor)
+            elif meas["data format"] == 3 or meas["data format"] == "string":
+                value = parse_string(meas["measurement data"])
+            elif meas["data format"] == 4 or meas["data format"] == "raw":
+                value = parse_raw(meas["measurement data"])
+            elif meas["data format"] == 5 or meas["data format"] == "timestamp":
+                value = parse_timestamp(meas["measurement data"])
+            else:
+                _LOGGER.error(
+                    "%s: UNKNOWN dataobject in BTHome BLE payload! Adv: %s",
+                    self.title,
+                    payload.hex(),
+                )
+                continue
+
+            if value is not None:
+                if (
+                    isinstance(meas_format, BaseSensorDescription)
+                    and meas_format.device_class
+                ):
+                    self.update_sensor(
+                        key=f"{str(meas_format.device_class)}{postfix}",
+                        native_unit_of_measurement=meas_format.native_unit_of_measurement,
+                        native_value=value,
+                        device_class=meas_format.device_class,
+                    )
+                elif (
+                    isinstance(meas_format, BaseBinarySensorDescription)
+                    and meas_format.device_class
+                ):
+                    self.update_binary_sensor(
+                        key=f"{str(meas_format.device_class)}{postfix}",
+                        device_class=meas_format.device_class,
+                        native_value=bool(value),
+                    )
+                elif isinstance(meas_format, EventDeviceKeys):
+                    event_type = parse_event_type(
+                        event_device=meas_format,
+                        data_obj=meas["measurement data"][0],
+                    )
+                    event_properties = parse_event_properties(
+                        event_device=meas_format,
+                        data_obj=meas["measurement data"][1:],
+                    )
+                    if event_type:
+                        self.fire_event(
+                            key=f"{str(meas_format)}{postfix}",
+                            event_type=event_type,
+                            event_properties=event_properties,
+                        )
+                result = True
+            else:
+                _LOGGER.debug(
+                    "%s: UNKNOWN dataobject in BTHome BLE payload! Adv: %s",
+                    self.title,
+                    payload.hex(),
+                )
+
+        if not result:
+            return False
+
+        return True
+
+    def _decrypt_bthome(
+        self,
+        service_info: BluetoothServiceInfoBleak,
+        service_data: bytes,
+        bthome_mac: bytes,
+        sw_version: int,
+        adv_info: int = 65,
+    ) -> bytes:
+        """Decrypt encrypted BTHome BLE advertisements"""
+        if not self.bindkey:
+            self.bindkey_verified = False
+            _LOGGER.debug("%s: Encryption key not set and adv is encrypted", self.title)
+            raise ValueError
+
+        if not self.bindkey or len(self.bindkey) != 16:
+            self.bindkey_verified = False
+            _LOGGER.error(
+                "%s: Encryption key should be 16 bytes (32 characters) long", self.title
+            )
+            raise ValueError
+
+        # check for minimum length of encrypted advertisement
+        if len(service_data) < (12 if sw_version == 1 else 11):
+            _LOGGER.debug(
+                "%s: Invalid data length (for decryption), adv: %s",
+                self.title,
+                service_data.hex(),
+            )
+            raise ValueError
+
+        # prepare the data for decryption
+        if sw_version == 1:
+            uuid = b"\x1e\x18"
+        else:
+            uuid = b"\xd2\xfc" + bytes([adv_info])
+        encrypted_payload = service_data[:-8]
+        last_encryption_counter = self.encryption_counter
+        counter = service_data[-8:-4]
+        new_encryption_counter = parse_uint(counter)
+        mic = service_data[-4:]
+
+        # nonce: mac [6], uuid16 [2 (v1) or 3 (v2)], counter [4]
+        nonce = b"".join([bthome_mac, uuid, counter])
+
+        associated_data = None
+        if sw_version == 1:
+            associated_data = b"\x11"
+
+        assert self.cipher is not None  # nosec
+
+        # filter advertisements that are exactly the same as the previous advertisement
+        if (
+            self.last_service_info
+            and service_info.service_data == self.last_service_info.service_data
+            and self.bindkey_verified is True
+        ):
+            _LOGGER.debug(
+                "%s: The service data is the same as the previous service data. Skipping "
+                "this BLE advertisement.",
+                self.title,
+            )
+            raise ValueError
+
+        # Filter advertisements with a decreasing encryption counter.
+        # Allow cases where the counter has restarted from 0
+        # (after reaching the highest number or due to a battery change).
+        # In all other cases, assume the data has been compromised and skip the advertisement.
+        if (
+            new_encryption_counter < last_encryption_counter
+            and self.bindkey_verified is True
+            and new_encryption_counter >= 100
+        ):
+            _LOGGER.warning(
+                "%s: The new encryption counter (%i) is lower than the previous value (%i). "
+                "The data might be compromised. BLE advertisement will be skipped.",
+                self.title,
+                new_encryption_counter,
+                last_encryption_counter,
+            )
+            raise ValueError
+
+        # decrypt the data
+        try:
+            decrypted_payload = self.cipher.decrypt(
+                nonce, encrypted_payload + mic, associated_data
+            )
+        except InvalidTag as error:
+            if self.decryption_failed is True:
+                # we only ask for reautentification after the decryption has failed twice.
+                self.bindkey_verified = False
+            else:
+                self.decryption_failed = True
+            _LOGGER.warning("%s: Decryption failed: %s", self.title, error)
+            _LOGGER.debug("%s: mic: %s", self.title, mic.hex())
+            _LOGGER.debug("%s: nonce: %s", self.title, nonce.hex())
+            _LOGGER.debug(
+                "%s: encrypted_payload: %s", self.title, encrypted_payload.hex()
+            )
+            raise ValueError
+        if decrypted_payload is None:
+            self.bindkey_verified = False
+            _LOGGER.error(
+                "%s: Decryption failed for %s, decrypted payload is None",
+                self.title,
+                to_mac(bthome_mac),
+            )
+            raise ValueError
+        self.decryption_failed = False
+        self.bindkey_verified = True
+        self.encryption_counter = new_encryption_counter
+
+        return decrypted_payload
+    

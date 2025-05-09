@@ -1,0 +1,22 @@
+write:
+  name: Write Label
+  description: Write Gicisky Label image
+  target:
+    device:
+      manufacturer: Gicisky
+  fields:
+    payload:
+      name: Payload
+      description: payload to draw
+      required: true
+      example: examples
+    rotate:
+      name: rotate
+      description: 0, 90, 180, 270
+      required: false
+      example: 0
+    threshold:
+      name: threshold
+      description: 0 ~ 255
+      required: false
+      example: 200

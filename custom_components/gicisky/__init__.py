@@ -4,32 +4,33 @@ from __future__ import annotations
 
 from functools import partial
 import logging
-from typing import cast
-
-from .gicisky_ble import SensorUpdate, GiciskyBluetoothDeviceData
-
+from .imagegen import *
+from .gicisky_ble import GiciskyBluetoothDeviceData, SensorUpdate
+from .gicisky_ble.parser import EncryptionScheme
+from .gicisky_ble.writer import write_image
 from homeassistant.components.bluetooth import (
     DOMAIN as BLUETOOTH_DOMAIN,
     BluetoothScanningMode,
     BluetoothServiceInfoBleak,
     async_ble_device_from_address,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import CoreState, HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH, DeviceRegistry
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.util.signal_type import SignalType
 
 from .const import (
+    GICISKY_BLE_EVENT,
+    CONF_BINDKEY,
     CONF_DISCOVERED_EVENT_CLASSES,
     CONF_SLEEPY_DEVICE,
     DOMAIN,
-    GICISKY_BLE_EVENT,
     GiciskyBleEvent,
 )
-from .coordinator import GiciskyActiveBluetoothProcessorCoordinator
-from .types import GiciskyBLEConfigEntry
+from .coordinator import GiciskyPassiveBluetoothProcessorCoordinator
+from .types import GiciskyConfigEntry
 
 PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.EVENT, Platform.SENSOR]
 
@@ -38,7 +39,7 @@ _LOGGER = logging.getLogger(__name__)
 
 def process_service_info(
     hass: HomeAssistant,
-    entry: GiciskyBLEConfigEntry,
+    entry: GiciskyConfigEntry,
     device_registry: DeviceRegistry,
     service_info: BluetoothServiceInfoBleak,
 ) -> SensorUpdate:
@@ -46,12 +47,28 @@ def process_service_info(
     coordinator = entry.runtime_data
     data = coordinator.device_data
     update = data.update(service_info)
+
+    sensor_device_info = next(iter(update.devices.values()), None)
+    if sensor_device_info:
+        address = service_info.device.address
+        device = device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            connections={(CONNECTION_BLUETOOTH, address)},
+            identifiers={(BLUETOOTH_DOMAIN, address)},
+            manufacturer=sensor_device_info.manufacturer,
+            model=sensor_device_info.model,
+            name=sensor_device_info.name,
+            sw_version=sensor_device_info.sw_version,
+            hw_version=sensor_device_info.hw_version,
+        )
+    _LOGGER.info("process_service_info: %s", update)
     discovered_event_classes = coordinator.discovered_event_classes
     if entry.data.get(CONF_SLEEPY_DEVICE, False) != data.sleepy_device:
         hass.config_entries.async_update_entry(
             entry,
             data=entry.data | {CONF_SLEEPY_DEVICE: data.sleepy_device},
         )
+    
     if update.events:
         address = service_info.device.address
         for device_key, event in update.events.items():
@@ -90,101 +107,75 @@ def process_service_info(
                     hass, format_discovered_event_class(address), event_class, ble_event
                 )
 
-            hass.bus.async_fire(GICISKY_BLE_EVENT, cast(dict, ble_event))
+            hass.bus.async_fire(GICISKY_BLE_EVENT, ble_event)
             async_dispatcher_send(
                 hass,
                 format_event_dispatcher_name(address, event_class),
                 ble_event,
             )
 
-    # If device isn't pending we know it has seen at least one broadcast with a payload
-    # If that payload was encrypted and the bindkey was not verified then we need to reauth
-    if (
-        not data.pending
-    ):
+    # If payload is encrypted and the bindkey is not verified then we need to reauth
+    if data.encryption_scheme != EncryptionScheme.NONE and not data.bindkey_verified:
         entry.async_start_reauth(hass, data={"device": data})
 
     return update
 
 
-def format_event_dispatcher_name(address: str, event_class: str) -> str:
+def format_event_dispatcher_name(
+    address: str, event_class: str
+) -> SignalType[GiciskyBleEvent]:
     """Format an event dispatcher name."""
-    return f"{DOMAIN}_event_{address}_{event_class}"
+    return SignalType(f"{DOMAIN}_event_{address}_{event_class}")
 
 
-def format_discovered_event_class(address: str) -> str:
+def format_discovered_event_class(address: str) -> SignalType[str, GiciskyBleEvent]:
     """Format a discovered event class."""
-    return f"{DOMAIN}_discovered_event_class_{address}"
+    return SignalType(f"{DOMAIN}_discovered_event_class_{address}")
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Gicisky BLE device from a config entry."""
+async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> bool:
+    """Set up Gicisky Bluetooth from a config entry."""
     address = entry.unique_id
     assert address is not None
 
     kwargs = {}
-    if bindkey := entry.data.get("bindkey"):
-        kwargs["bindkey"] = bytes.fromhex(bindkey)
+    if bindkey := entry.data.get(CONF_BINDKEY):
+        kwargs[CONF_BINDKEY] = bytes.fromhex(bindkey)
     data = GiciskyBluetoothDeviceData(**kwargs)
-    _LOGGER.info(f"async_setup_entry {data}")
-    def _needs_poll(
-        service_info: BluetoothServiceInfoBleak, last_poll: float | None
-    ) -> bool:
-        # Only poll if hass is running, we need to poll,
-        # and we actually have a way to connect to the device
-        return (
-            hass.state is CoreState.running
-            and data.poll_needed(service_info, last_poll)
-            and bool(
-                async_ble_device_from_address(
-                    hass, service_info.device.address, connectable=True
-                )
-            )
-        )
-
-    async def _async_poll(service_info: BluetoothServiceInfoBleak) -> SensorUpdate:
-        # BluetoothServiceInfoBleak is defined in HA, otherwise would just pass it
-        # directly to the Gicisky code
-        # Make sure the device we have is one that we can connect with
-        # in case its coming from a passive scanner
-        if service_info.connectable:
-            connectable_device = service_info.device
-        elif device := async_ble_device_from_address(
-            hass, service_info.device.address, True
-        ):
-            connectable_device = device
-        else:
-            # We have no bluetooth controller that is in range of
-            # the device to poll it
-            raise RuntimeError(
-                f"No connectable device found for {service_info.device.address}"
-            )
-        return await data.async_poll(connectable_device)
 
     device_registry = dr.async_get(hass)
-    coordinator = GiciskyActiveBluetoothProcessorCoordinator(
+    event_classes = set(entry.data.get(CONF_DISCOVERED_EVENT_CLASSES, ()))
+    coordinator = GiciskyPassiveBluetoothProcessorCoordinator(
         hass,
         _LOGGER,
         address=address,
         mode=BluetoothScanningMode.PASSIVE,
         update_method=partial(process_service_info, hass, entry, device_registry),
-        needs_poll_method=_needs_poll,
         device_data=data,
-        discovered_event_classes=set(entry.data.get(CONF_DISCOVERED_EVENT_CLASSES, [])),
-        poll_method=_async_poll,
-        # We will take advertisements from non-connectable devices
-        # since we will trade the BLEDevice for a connectable one
-        # if we need to poll it
-        connectable=False,
+        discovered_event_classes=event_classes,
+        connectable=True,
         entry=entry,
     )
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+
+    @callback
+    # callback for the draw custom service
+    async def writeservice(service: ServiceCall) -> None:
+        ble_device = async_ble_device_from_address(hass, address)
+        binary = await hass.async_add_executor_job(customimage, entry.entry_id, data.device, service, hass)
+
+        await write_image(ble_device, data.device, binary)             
+
+    # register the services
+    hass.services.async_register(DOMAIN, "write", writeservice)
+
     # only start after all platforms have had a chance to subscribe
     entry.async_on_unload(coordinator.async_start())
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: GiciskyBLEConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> bool:
     """Unload a config entry."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

@@ -89,13 +89,13 @@ class BLETransport():
     #@disconnect_on_missing_services
     async def write_ble(self, uuid: str, data: bytes):
         """Write data to the BLE characteristic."""
-        _LOGGER.info("Write UUID: %s, %s", uuid, data)
+        #_LOGGER.info("Write UUID: %s, %s", uuid, data)
         await self._client.write_gatt_char(uuid, data)
 
     def _notification_handler(self, _: Any, data: bytearray):
         """Handle incoming notifications and store the received data."""
         self._command_data = data
-        _LOGGER.info("Recv : %s", data)
+        #_LOGGER.info("Recv : %s", data)
         self._event.set()  # Notify the waiting coroutine that data has arrived
     
     #@disconnect_on_missing_services
@@ -123,19 +123,26 @@ class GiciskyClient:
     async def stop_notify(self):
         await self._transport.stop_notify(self._cmd_uuid)
 
+    async def write_cmd(self, uuid, cmd):
+        await self.start_notify()
+        await self._transport.write_ble(uuid, cmd)
+        recv = await self._transport.read()
+        await self.stop_notify()
+        return recv
+
     async def write_image(self, binary):
         self.image_packet = self.get_image_packet(binary)
-        await self._transport.write_ble(self._cmd_uuid, self.get_cmd_packet(0x01))
+        data = await self.write_cmd(self._cmd_uuid, self.get_cmd_packet(0x01))
         while True:
-            data = await self._transport.read()
+            if len(data) == 0:
+                break
             if data[0] == 0x01:
                 if len(data) < 3 or data[1] != 0xf4 or data[2] != 0x00:
                     break
-                await self._transport.write_ble(self._cmd_uuid, self.get_cmd_packet(0x02))
+                data = await self.write_cmd(self._cmd_uuid, self.get_cmd_packet(0x02))
                 
             elif data[0] == 0x02:
-                await self._transport.write_ble(self._cmd_uuid, self.get_cmd_packet(0x03))
-
+                data = await self.write_cmd(self._cmd_uuid, self.get_cmd_packet(0x03))
             elif data[0] == 0x05:
                 if len(data) < 6:
                     break
@@ -144,7 +151,9 @@ class GiciskyClient:
                     break
                 elif data[1] == 0x00:
                     part = (data[5] << 24) | (data[4] << 16) | (data[3] << 8) | data[2]
-                    await self._transport.write_ble(self._img_uuid, self.get_img_packet(part))
+                    data = await self.write_cmd(self._img_uuid, self.get_img_packet(part))
+        await sleep(0.5)
+        _LOGGER.info("End")
     
 
     def get_image_packet(self, binary):

@@ -187,7 +187,7 @@ class GiciskyClient:
                     if pixel > 100:                    
                         current_byte |= (1 << bit_position)
                     pixel_red = image_pixel_red[pos]
-                    if pixel_red < 100:                    
+                    if pixel_red > 100:                    
                         current_byte_red |= (1 << bit_position)
                 else:
                     pixel = image_pixel[pos]

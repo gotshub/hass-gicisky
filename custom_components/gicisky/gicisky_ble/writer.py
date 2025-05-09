@@ -44,9 +44,7 @@ async def write_image(ble_device: BLEDevice, device: DeviceEntry, binary):
             _LOGGER.info("  Characteristic UUID: %s", char_uuids)
             if len(char_uuids) == 3:
                 gicisky = GiciskyClient(client, char_uuids, device)
-                await gicisky.start_notify()
                 await gicisky.write_image(binary)
-                await gicisky.stop_notify()
             await client.disconnect()
     except:
         await client.disconnect()
@@ -131,6 +129,7 @@ class GiciskyClient:
         return recv
 
     async def write_image(self, binary):
+        _LOGGER.info("Write image")
         self.image_packet = self.get_image_packet(binary)
         data = await self.write_cmd(self._cmd_uuid, self.get_cmd_packet(0x01))
         while True:
@@ -153,7 +152,7 @@ class GiciskyClient:
                     part = (data[5] << 24) | (data[4] << 16) | (data[3] << 8) | data[2]
                     data = await self.write_cmd(self._img_uuid, self.get_img_packet(part))
         await sleep(0.5)
-        _LOGGER.info("End")
+        _LOGGER.info("Write end")
     
 
     def get_image_packet(self, binary):

@@ -28,17 +28,17 @@ class DeviceEntry:
 
 
     # 0x0B: (250, 128),  # GICI_BLE_EPD_21_BWR
-    # 0x28: (296, 128),  # GICI_BLE_EPD_29_BW  (2.9ÀÎÄ¡, 296 ¡¿ 128 ÇÈ¼¿)
+    # 0x28: (296, 128),  # GICI_BLE_EPD_29_BW  (2.9ï¿½ï¿½Ä¡, 296 ï¿½ï¿½ 128 ï¿½È¼ï¿½)
     # 0x30: (296, 128),  # GICI_BLE_EPD_29_BW
     # 0x2B: (296, 128),  # GICI_BLE_EPD_29_BWR
     # 0x33: (296, 128),  # GICI_BLE_EPD_29_BWR1
-    # 0x48: (400, 300),  # GICI_BLE_EPD_BW_42  (4.2ÀÎÄ¡, 400 ¡¿ 300 ÇÈ¼¿)
+    # 0x48: (400, 300),  # GICI_BLE_EPD_BW_42  (4.2ï¿½ï¿½Ä¡, 400 ï¿½ï¿½ 300 ï¿½È¼ï¿½)
     # 0x4B: (400, 300),  # GICI_BLE_EPD_BWR_42
     # 0x40: (400, 300),  # GICI_BLE_TFT_BW_42
     # 0x42: (400, 300),  # GICI_BLE_TFT_BWR_42
-    # 0x68: (800, 480),  # GICI_BLE_EPD_BW_74  (7.4ÀÎÄ¡, 800 ¡¿ 480 ÇÈ¼¿)
+    # 0x68: (800, 480),  # GICI_BLE_EPD_BW_74  (7.4ï¿½ï¿½Ä¡, 800 ï¿½ï¿½ 480 ï¿½È¼ï¿½)
     # 0x6A: (800, 480),  # GICI_BLE_EPD_BWR_74
-    # 0xEB: (296, 128),  # GICI_BLE_EPD_BWR_29_SILABS (2.9ÀÎÄ¡)
+    # 0xEB: (296, 128),  # GICI_BLE_EPD_BWR_29_SILABS (2.9ï¿½ï¿½Ä¡)
 
 DEVICE_TYPES: dict[int, DeviceEntry] = {
     0xA0: DeviceEntry(

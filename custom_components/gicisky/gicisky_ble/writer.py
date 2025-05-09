@@ -131,9 +131,7 @@ class GiciskyClient:
 
     async def write_cmd(self, uuid, cmd):
         await self._transport.write_ble(uuid, cmd)
-        await sleep(0.05)
-        data = await self._transport.read()
-        return data
+        return await self._transport.read()
 
     async def write_image(self, binary):
         _LOGGER.info("Start")
@@ -159,7 +157,7 @@ class GiciskyClient:
                     elif data[1] == 0x00:
                         part = (data[5] << 24) | (data[4] << 16) | (data[3] << 8) | data[2]
                         data = await self.write_cmd(self._img_uuid, self.get_img_packet(part))
-                await sleep(0.5)
+
         except Exception as e:
             _LOGGER.info("Error %s", e)
         _LOGGER.info("End")
@@ -178,6 +176,7 @@ class GiciskyClient:
         width, height = self._device.resolution
         red = self._device.red
         #for pixel in image_data:
+        _LOGGER.info("Image %s %s %s", width, height, red)
         for x in range(width):
             for y in range(height):
                 

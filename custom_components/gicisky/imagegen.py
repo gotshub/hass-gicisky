@@ -624,8 +624,8 @@ def customimage(entity_id, device, service, hass):
     isExist = os.path.exists(pathc)
     if not isExist:
         os.makedirs(pathc)
-    rgb_image.save(patha, format='JPEG', quality="maximum")
-    shutil.copy2(patha,pathb)
+    rgb_image.save(pathb, format='JPEG', quality="maximum")
+    # shutil.copy2(patha,pathb)
 
     red_channel = rgb_image.split()[0]  # R (Red) 채널 추출
     binary = rgb_image.convert('L')  # 그레이스케일로 변환

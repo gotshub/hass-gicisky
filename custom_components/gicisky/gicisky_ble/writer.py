@@ -92,7 +92,12 @@ class BLETransport():
     async def write_ble(self, uuid: str, data: bytes):
         """Write data to the BLE characteristic."""
         _LOGGER.info("Write UUID: %s, %s", uuid, data.hex())
-        await self._client.write_gatt_char(uuid, data)
+        CHUNK_SIZE = 20
+        for i in range(0, len(data), CHUNK_SIZE):
+            chunk = data[i:i+CHUNK_SIZE]
+            await self._client.write_gatt_char(uuid, chunk)
+            await sleep(0.05)
+        
 
     def _notification_handler(self, _: Any, data: bytearray):
         """Handle incoming notifications and store the received data."""

@@ -45,10 +45,12 @@ async def write_image(ble_device: BLEDevice, device: DeviceEntry, binary):
             if len(char_uuids) == 3:
                 gicisky = GiciskyClient(client, char_uuids, device)
                 await gicisky.write_image(binary)
+                return True
             await client.disconnect()
     except Exception as e:
         _LOGGER.info("except %s", e)
         await client.disconnect()
+    return False
 
     
 class BLETransport():

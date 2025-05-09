@@ -177,9 +177,9 @@ class GiciskyClient:
         red = self._device.red
         #for pixel in image_data:
         _LOGGER.info("Image %s %s %s", width, height, red)
-        for x in range(width):
-            for y in range(height):
-                pos = (x * height) + y
+        for y in range(height):
+            for x in range(width):
+                pos = (y * width) + x
                 if red:
                     pixel = image_pixel[pos]
                     if pixel > 100:                    

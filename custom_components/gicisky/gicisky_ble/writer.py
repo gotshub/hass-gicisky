@@ -17,6 +17,7 @@ from asyncio import Event, wait_for, sleep
 from bleak.backends.device import BLEDevice
 from bleak_retry_connector import establish_connection
 from .devices import DeviceEntry
+from .const import SERVICE_GICISKY
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,10 +35,10 @@ async def write_image(ble_device: BLEDevice, device: DeviceEntry, binary):
         client = await establish_connection(BleakClient, ble_device, ble_device.address)
         if client.is_connected:
             char_uuids = []
-            advertised_uuids = ble_device.metadata.get("uuids", [])
-            services = await client.get_services()
+            services = client.services
+            _LOGGER.info("  Service UUID: %s", services)
             for service in services:
-                if service.uuid in advertised_uuids:
+                if service.uuid == SERVICE_GICISKY:
                     for char in service.characteristics:
                         char_uuids.append(char.uuid)
             _LOGGER.info("  Characteristic UUID: %s", char_uuids)

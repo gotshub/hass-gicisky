@@ -179,7 +179,8 @@ class GiciskyClient:
         _LOGGER.info("Image %s %s %s", width, height, red)
         for y in range(height):
             for x in range(width):
-                pos = (y * width) + x
+                #pos = (y * width) + x
+                pos = (x * height) + y
                 if red:
                     pixel = image_pixel[pos]
                     if pixel > 100:                    

@@ -133,28 +133,31 @@ class GiciskyClient:
 
     async def write_image(self, binary):
         _LOGGER.info("Start")
-        self.image_packet = self.get_image_packet(binary)
-        data = await self.write_cmd(self._cmd_uuid, self.get_cmd_packet(0x01))
-        while True:
-            if len(data) == 0:
-                break
-            if data[0] == 0x01:
-                if len(data) < 3 or data[1] != 0xf4 or data[2] != 0x00:
+        try:
+            self.image_packet = self.get_image_packet(binary)
+            data = await self.write_cmd(self._cmd_uuid, self.get_cmd_packet(0x01))
+            while True:
+                if len(data) == 0:
                     break
-                data = await self.write_cmd(self._cmd_uuid, self.get_cmd_packet(0x02))
-                
-            elif data[0] == 0x02:
-                data = await self.write_cmd(self._cmd_uuid, self.get_cmd_packet(0x03))
-            elif data[0] == 0x05:
-                if len(data) < 6:
-                    break
-                if data[1] == 0x08:
-                    # End 상태 처리
-                    break
-                elif data[1] == 0x00:
-                    part = (data[5] << 24) | (data[4] << 16) | (data[3] << 8) | data[2]
-                    data = await self.write_cmd(self._img_uuid, self.get_img_packet(part))
-            await sleep(0.5)
+                if data[0] == 0x01:
+                    if len(data) < 3 or data[1] != 0xf4 or data[2] != 0x00:
+                        break
+                    data = await self.write_cmd(self._cmd_uuid, self.get_cmd_packet(0x02))
+                    
+                elif data[0] == 0x02:
+                    data = await self.write_cmd(self._cmd_uuid, self.get_cmd_packet(0x03))
+                elif data[0] == 0x05:
+                    if len(data) < 6:
+                        break
+                    if data[1] == 0x08:
+                        # End 상태 처리
+                        break
+                    elif data[1] == 0x00:
+                        part = (data[5] << 24) | (data[4] << 16) | (data[3] << 8) | data[2]
+                        data = await self.write_cmd(self._img_uuid, self.get_img_packet(part))
+                await sleep(0.5)
+        except Exception as e:
+            _LOGGER.info("Error %s", e)
         _LOGGER.info("End")
     
 

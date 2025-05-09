@@ -175,7 +175,8 @@ class GiciskyClient:
         image_pixel_red = list(image_data_red.getdata())
         width, height = self._device.resolution
         red = self._device.red
-
+        _LOGGER.info("Binary %s", len(image_data))
+        _LOGGER.info("Red %s", len(image_data_red))
         
         for y in range(height):
             for x in range(width):

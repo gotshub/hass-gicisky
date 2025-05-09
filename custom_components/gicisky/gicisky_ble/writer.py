@@ -72,7 +72,7 @@ class BLETransport():
         return cast(WrapFuncType, wrapper)
     
     async def read(self) -> bytes:
-        return await self.read_notify(30)
+        return await self.read_notify(60)
 
     async def write(self, uuid: str, data: bytes):
         return await self.write_ble(uuid, data)
@@ -152,6 +152,7 @@ class GiciskyClient:
                 elif data[1] == 0x00:
                     part = (data[5] << 24) | (data[4] << 16) | (data[3] << 8) | data[2]
                     data = await self.write_cmd(self._img_uuid, self.get_img_packet(part))
+            await sleep(0.5)
         await sleep(0.5)
         _LOGGER.info("Write end")
     

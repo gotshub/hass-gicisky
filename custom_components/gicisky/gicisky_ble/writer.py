@@ -84,7 +84,7 @@ class GiciskyClient:
         self.width = device.width
         self.height = device.height
         self.support_red = device.red
-        self.packet_size = (self.width * self.height) // 8 * (2 if self.support_red else 1)
+        self.packet_size = (device.width * device.height) // 8 * (2 if device.red else 1)
         self.event: Event = Event()
         self.command_data: bytes | None = None
         self.image_packets: list[int] = []

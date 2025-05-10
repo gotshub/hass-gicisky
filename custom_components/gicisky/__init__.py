@@ -66,6 +66,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
     assert address is not None
 
     data = GiciskyBluetoothDeviceData()
+    hass.data[DOMAIN][entry.entry_id] = {}
+    hass.data[DOMAIN][entry.entry_id]['address'] = address
+    hass.data[DOMAIN][entry.entry_id]['data'] = data
 
     device_registry = dr.async_get(hass)
     event_classes = set(entry.data.get(CONF_DISCOVERED_EVENT_CLASSES, ()))
@@ -87,9 +90,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
     @callback
     # callback for the draw custom service
     async def writeservice(service: ServiceCall) -> None:
-        ble_device = async_ble_device_from_address(hass, address)
-        image = await hass.async_add_executor_job(customimage, entry.entry_id, data.device, service, hass)
-        await update_image(ble_device, data.device, image)            
+        device_ids = service.data.get("device_id")
+        if isinstance(device_ids, str):
+            device_ids = [device_ids]
+
+        # Process each device
+        for device_id in device_ids:
+            entry_id = get_entry_id_from_device(hass, device_id)
+            address = hass.data[DOMAIN][entry_id]['address']
+            data = hass.data[DOMAIN][entry_id]['data']
+            ble_device = async_ble_device_from_address(hass, address)
+            image = await hass.async_add_executor_job(customimage, entry_id, data.device, service, hass)
+            await update_image(ble_device, data.device, image)            
 
     # register the services
     hass.services.async_register(DOMAIN, "write", writeservice)
@@ -102,3 +114,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
 async def async_unload_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> bool:
     """Unload a config entry."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+async def get_entry_id_from_device(hass, device_id: str) -> str:
+    device_reg = dr.async_get(hass)
+    device_entry = device_reg.async_get(device_id)
+    if not device_entry:
+        raise ValueError(f"Unknown device_id: {device_id}")
+    if not device_entry.config_entries:
+        raise ValueError(f"No config entries for device {device_id}")
+
+    entry_id = device_entry.config_entries[0]
+    return entry_id

@@ -61,6 +61,7 @@ class GiciskyBluetoothDeviceData(BluetoothData):
         device_id = data[0]
         bettery = data[1]
         firmware = (data[2] << 8) + data[3]
+        hardware = (data[0] << 8) + data[4]
         try:
             device = DEVICE_TYPES[device_id]
         except KeyError:
@@ -74,7 +75,8 @@ class GiciskyBluetoothDeviceData(BluetoothData):
         self.set_device_name(f"{device.manufacturer} {identifier}")
         self.set_device_type(f"{device.model} {device.resolution}")
         self.set_device_manufacturer(device.manufacturer)
-        self.set_device_sw_version(firmware)
+        self.set_device_sw_version(f"{firmware}")
+        self.set_device_hw_version(f"{hardware}")
 
         volt = bettery / 10
         min = device.min_voltage

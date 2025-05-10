@@ -43,6 +43,8 @@ async def write_image(ble_device: BLEDevice, device: DeviceEntry, binary):
     except Exception as e:
         _LOGGER.info("except %s", e)
         await client.disconnect()
+        return False
+    return True
 
     
 class BLETransport():

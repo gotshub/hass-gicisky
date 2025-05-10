@@ -8,6 +8,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESCCM
 from home_assistant_bluetooth import BluetoothServiceInfoBleak
 from sensor_state_data import (
     SensorLibrary,
+    BinarySensorDeviceClass,
 )
 
 from .devices import DEVICE_TYPES, DeviceEntry
@@ -83,4 +84,11 @@ class GiciskyBluetoothDeviceData(BluetoothData):
         self.update_predefined_sensor(
             SensorLibrary.VOLTAGE__ELECTRIC_POTENTIAL_VOLT, round(volt, 1)
         )
+        self.update_predefined_binary_sensor(
+            BinarySensorDeviceClass.CONNECTIVITY, False
+        )
         return True
+    def update_connectivity(self, conn):
+        self.update_predefined_binary_sensor(
+            BinarySensorDeviceClass.CONNECTIVITY, conn
+        )

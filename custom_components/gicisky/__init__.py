@@ -64,7 +64,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
     """Set up Gicisky Bluetooth from a config entry."""
     if DOMAIN not in hass.data:
         hass.data[DOMAIN] = {}
-        
+
     address = entry.unique_id
     assert address is not None
 
@@ -126,5 +126,6 @@ async def get_entry_id_from_device(hass, device_id: str) -> str:
     if not device_entry.config_entries:
         raise ValueError(f"No config entries for device {device_id}")
 
+    _LOGGER.debug(f"{device_id} to {device_entry.config_entries}")
     entry_id = device_entry.config_entries[0]
     return entry_id

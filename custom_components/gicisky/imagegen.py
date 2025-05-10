@@ -93,8 +93,8 @@ def customimage(entity_id, device, service, hass):
     payload = service.data.get("payload", "")
     rotate = int(service.data.get("rotate", 0))
     background = getIndexColor(service.data.get("background","white"))
-    canvas_width, canvas_height = device.resolution
-    threshold = int(service.data.get("threshold", 200))
+    canvas_width = device.width
+    canvas_height = device.height
     img = Image.new('RGBA', (canvas_width, canvas_height), color=background)
     # if rotate == 0:
     #     img = Image.new('RGBA', (canvas_width, canvas_height), color=background)
@@ -627,11 +627,7 @@ def customimage(entity_id, device, service, hass):
     rgb_image.save(pathb, format='JPEG', quality="maximum")
     # shutil.copy2(patha,pathb)
 
-    red_channel = rgb_image.split()[0]  # R (Red) 채널 추출
-    binary = rgb_image.convert('L')  # 그레이스케일로 변환
-    binary = binary.point(lambda x: 255 if x > threshold else 0, mode='1')
-    binary_red = red_channel.point(lambda x: 255 if x > threshold else 0, mode='1')
-    return binary, binary_red
+    return rgb_image
 
 def check_for_missing_required_arguments(element, required_keys, func_name):
     missing_keys = []

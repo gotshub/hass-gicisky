@@ -15,8 +15,3 @@ write:
       description: 0, 90, 180, 270
       required: false
       example: 0
-    threshold:
-      name: threshold
-      description: 0 ~ 255
-      required: false
-      example: 200

@@ -73,7 +73,7 @@ class GiciskyBluetoothDeviceData(BluetoothData):
         identifier = service_info.address.replace(":", "")[-8:]
         self.set_title(f"{identifier} ({device.model})")
         self.set_device_name(f"{device.manufacturer} {identifier}")
-        self.set_device_type(f"{device.model} {device.resolution}")
+        self.set_device_type(f"{device.model} {device.width}x{device.height}")
         self.set_device_manufacturer(device.manufacturer)
         self.set_device_sw_version(f"{firmware}")
         self.set_device_hw_version(f"{hardware}")

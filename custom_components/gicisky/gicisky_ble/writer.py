@@ -1,233 +1,212 @@
-from __future__ import annotations
+# gicisky_ble.py
 
+from __future__ import annotations
+from enum import Enum
 import logging
 import struct
-
-from bleak import BleakClient, BleakError
-from typing import Any, Callable, TypeVar, cast
+from typing import Any, Callable, TypeVar
 from asyncio import Event, wait_for, sleep
+from PIL import Image
+from bleak import BleakClient, BleakError
 from bleak.backends.device import BLEDevice
 from bleak_retry_connector import establish_connection
+
 from .devices import DeviceEntry
 from .const import SERVICE_GICISKY
 
 _LOGGER = logging.getLogger(__name__)
 
-WrapFuncType = TypeVar("WrapFuncType", bound=Callable[..., Any])
-
+# 예외 정의
 class BleakCharacteristicMissing(BleakError):
-    """Raised when a characteristic is missing from a service."""
+    """Characteristic Missing"""
 
 class BleakServiceMissing(BleakError):
-    """Raised when a service is missing."""
+    """Service Missing"""
 
+WrapFuncType = TypeVar("WrapFuncType", bound=Callable[..., Any])
 
-async def write_image(ble_device: BLEDevice, device: DeviceEntry, binary):
+def disconnect_on_missing_services(func: WrapFuncType) -> WrapFuncType:
+    """Missing services"""
+    async def wrapper(self, *args, **kwargs):
+        try:
+            return await func(self, *args, **kwargs)
+        except (BleakServiceMissing, BleakCharacteristicMissing):
+            if self.client.is_connected:
+                await self.client.clear_cache()
+                await self.client.disconnect()
+            raise
+    return wrapper  # type: ignore
+
+async def update_image(
+    ble_device: BLEDevice,
+    device: DeviceEntry,
+    image: Image
+) -> bool:
+    client: BleakClient | None = None
     try:
         client = await establish_connection(BleakClient, ble_device, ble_device.address)
-        if client.is_connected:
-            char_uuids = []
-            services = client.services
-            _LOGGER.info("  Service UUID: %s", services)
-            for service in services:
-                if service.uuid == SERVICE_GICISKY:
-                    for char in service.characteristics:
-                        char_uuids.append(char.uuid)
-            _LOGGER.info("  Characteristic UUID: %s", char_uuids)
-            if len(char_uuids) == 3:
-                gicisky = GiciskyClient(client, char_uuids, device)
-                await gicisky.start_notify()
-                await gicisky.write_image(binary)
-                await gicisky.stop_notify()
-            await client.disconnect()
+        services = client.services
+        # SERVICE_GICISKY 특성 UUID 수집
+        char_uuids = [
+            c.uuid
+            for svc in services if svc.uuid == SERVICE_GICISKY
+            for c in svc.characteristics
+        ]
+        if len(char_uuids) != 3:
+            raise BleakServiceMissing(f"UUID Len: {len(char_uuids)}")
+        gicisky = GiciskyClient(client, char_uuids, device)
+        await gicisky.start_notify()
+        await gicisky.write_image(image)
+        await gicisky.stop_notify()
+        return True
     except Exception as e:
-        _LOGGER.info("except %s", e)
-        await client.disconnect()
+        _LOGGER.error("Fail image write: %s", e)
         return False
-    return True
-
-    
-class BLETransport():
-    _event: Event | None
-    _command_data: bytearray | None
-    def __init__(self, client: BleakClient):
-        self._client = client
-        self._command_data = None
-        self._event = Event()
-
-    def disconnect_on_missing_services(func: WrapFuncType) -> WrapFuncType:
-        """Decorator to handle disconnection on missing services/characteristics."""
-        async def wrapper(self, *args: Any, **kwargs: Any):
-            try:
-                return await func(self, *args, **kwargs)
-            except (BleakServiceMissing, BleakCharacteristicMissing) as ex:
-                if self._client.is_connected:
-                    await self._client.clear_cache()
-                    await self._client.disconnect()
-                raise
-        return cast(WrapFuncType, wrapper)
-    
-    async def read(self) -> bytes:
-        return await self.read_notify(30)
-
-    async def write(self, uuid: str, data: bytes):
-        return await self.write_ble(uuid, data)
-    
-    async def read_notify(self, timeout: int) -> bytes:
-        """Wait for notification data to be received within the timeout."""
-        await wait_for(self._event.wait(), timeout=timeout)
-        data = self._command_data
-        self._command_data = None
-        self._event.clear()  # Reset the event for the next notification
-        _LOGGER.info("Recv : %s", data.hex())
-        return data
-
-    #@disconnect_on_missing_services
-    async def write_ble(self, uuid: str, data: bytes):
-        """Write data to the BLE characteristic."""
-        _LOGGER.info("Write UUID: %s, %s", uuid, data.hex())
-        CHUNK_SIZE = 20
-        for i in range(0, len(data), CHUNK_SIZE):
-            chunk = data[i:i+CHUNK_SIZE]
-            await self._client.write_gatt_char(uuid, chunk)
-            await sleep(0.05)
-        
-
-    def _notification_handler(self, _: Any, data: bytearray):
-        """Handle incoming notifications and store the received data."""
-        self._command_data = data
-        self._event.set()  # Notify the waiting coroutine that data has arrived
-    
-    #@disconnect_on_missing_services
-    async def start_notify(self, uuid: str):
-        """Start notifications from the BLE characteristic."""
-        await self._client.start_notify(uuid, self._notification_handler)
-        await sleep(0.5)
-
-    async def stop_notify(self, uuid: str):
-        """Stop notifications from the BLE characteristic."""
-        await self._client.stop_notify(uuid)
+    finally:
+        if client and client.is_connected:
+            await client.disconnect()
 
 class GiciskyClient:
-    def __init__(self, client: BleakClient, uuids, device: DeviceEntry):
-        self._transport = BLETransport(client)
-        self._packetbuf = bytearray()
-        self._cmd_uuid = uuids[0]
-        self._img_uuid = uuids[1]
-        self._device = device
+    class Status(Enum):
+        START = 0
+        SIZE_DATA = 1
+        IMAGE = 2
+        IMAGE_DATA = 3
         
+    def __init__(
+        self,
+        client: BleakClient,
+        uuids: list[str],
+        device: DeviceEntry
+    ) -> None:
+        self.client = client
+        self.cmd_uuid, self.img_uuid = uuids[:2]
+        self.width = device.width
+        self.height = device.height
+        self.support_red = device.red
+        self.packet_size = (self.width * self.height) // 8 * (2 if self.support_red else 1)
+        self.event: Event = Event()
+        self.command_data: bytes | None = None
+        self.image_packets: list[int] = []
 
-    async def start_notify(self):
-        await self._transport.start_notify(self._cmd_uuid)
+    @disconnect_on_missing_services
+    async def start_notify(self) -> None:
+        await self.client.start_notify(self.cmd_uuid, self._notification_handler)
+        await sleep(0.5)
 
-    async def stop_notify(self):
-        await self._transport.stop_notify(self._cmd_uuid)
+    @disconnect_on_missing_services
+    async def stop_notify(self) -> None:
+        await self.client.stop_notify(self.cmd_uuid)
 
-    async def write_cmd(self, uuid, cmd):
-        await self._transport.write_ble(uuid, cmd)
-        return await self._transport.read()
+    @disconnect_on_missing_services
+    async def write(self, uuid: str, data: bytes) -> None:
+        _LOGGER.debug("Write UUID=%s data=%s", uuid, data.hex())
+        for i in range(0, len(data), 20):
+            await self.client.write_gatt_char(uuid, data[i : i + 20])
+            await sleep(0.05)
 
-    async def write_image(self, binary):
-        _LOGGER.info("Start")
+    def _notification_handler(self, _: Any, data: bytearray) -> None:
+        self.command_data = bytes(data)
+        self.event.set()
+
+    async def read(self, timeout: float = 30.0) -> bytes:
+        await wait_for(self.event.wait(), timeout)
+        data = self.command_data or b""
+        self.command_data = None
+        self.event.clear()
+        _LOGGER.debug("Received: %s", data.hex())
+        return data
+
+    async def write_with_response(self, uuid, packet: bytes) -> bytes:
+        await self.write(uuid, packet)
+        return await self.read()
+    
+    async def write_start_with_response(self) -> bytes:
+        return await self.write_with_response(self.cmd_uuid, self._make_cmd_packet(0x01))
+
+    async def write_size_with_response(self) -> bytes:
+        return await self.write_with_response(self.cmd_uuid, self._make_cmd_packet(0x02))
+
+    async def write_start_image_with_response(self) -> bytes:
+        return await self.write_with_response(self.cmd_uuid, self._make_cmd_packet(0x03))
+
+    async def write_image_with_response(self, part:int) -> bytes:
+        return await self.write_with_response(self.img_uuid, self._make_img_packet(part))
+    
+    async def write_image(self, image: Image) -> None:
+        _LOGGER.info("Write Image")
+        part = 0
+        status = self.Status.START
+        self.image_packets = self._make_image_packets(image)
         try:
-            self.image_packet = self.get_image_packet(binary)
-            data = await self.write_cmd(self._cmd_uuid, self.get_cmd_packet(0x01))
             while True:
-                if len(data) == 0:
+                if status == self.Status.START:
+                    data = await self.write_start_with_response()
+                    if len(data) < 3 or data[0] != 0x01 or data[1] != 0xF4 or data[2] != 0x00:
+                        raise Exception(f"Packet Error: {data}")
+                    status = self.Status.SIZE_DATA
+                
+                elif status == self.Status.SIZE_DATA:  
+                    data = await self.write_size_with_response()
+                    if len(data) < 1 or data[0] != 0x02:
+                        raise Exception(f"Packet Error: {data}")
+                    status = self.Status.IMAGE
+
+                elif status == self.Status.IMAGE:  
+                    data = await self.write_start_image_with_response()
+                    if len(data) < 6 or data[0] != 0x05 or data[1] != 0x00:
+                        raise Exception(f"Packet Error: {data}")
+                    status = self.Status.IMAGE_DATA
+
+                elif status == self.Status.IMAGE_DATA:  
+                    data = await self.write_image_with_response(part)
+                    if len(data) < 6 or data[0] != 0x05 or data[1] != 0x00:
+                        break
+                    part = int.from_bytes(data[2:6], "little")
+                else:
                     break
-                if data[0] == 0x01:
-                    if len(data) < 3 or data[1] != 0xf4 or data[2] != 0x00:
-                        break
-                    data = await self.write_cmd(self._cmd_uuid, self.get_cmd_packet(0x02))
-                    
-                elif data[0] == 0x02:
-                    data = await self.write_cmd(self._cmd_uuid, self.get_cmd_packet(0x03))
-                elif data[0] == 0x05:
-                    if len(data) < 6:
-                        break
-                    if data[1] == 0x08:
-                        # End 상태 처리
-                        break
-                    elif data[1] == 0x00:
-                        part = (data[5] << 24) | (data[4] << 16) | (data[3] << 8) | data[2]
-                        data = await self.write_cmd(self._img_uuid, self.get_img_packet(part))
-
         except Exception as e:
-            _LOGGER.info("Error %s", e)
-        _LOGGER.info("End")
-    
+            _LOGGER.error("Write Error: %s", e)
+        finally:
+            _LOGGER.info("Finish")
 
-    def get_image_packet(self, binary):
-        current_byte = 0
-        current_byte_red = 0
-        bit_position = 7
-        byte_data = []
-        byte_data_red = []
-        image_packet = []
-        image_data, image_data_red = binary
-        image_pixel = list(image_data.getdata())
-        image_pixel_red = list(image_data_red.getdata())
-        width, height = self._device.resolution
-        red = self._device.red
-        _LOGGER.info("Binary %s", image_data.size)
-        _LOGGER.info("Red %s", image_data_red.size)
-        
-        for x in range(width):
-            for y in range(height):    
-                pos = (x * height) + y
-                pixel = image_pixel[pos]
-                if pixel > 0:                    
-                    current_byte |= (1 << bit_position)
-                pixel_red = image_pixel_red[pos]
-                if pixel_red > 0:                    
-                    current_byte_red |= (1 << bit_position)
+    def _make_image_packets(self, image: Image) -> list[int]:
+        threshold = 195
+        red_channel = image.split()[0]  # R (Red) 채널 추출
+        binary = image.convert('L')  # 그레이스케일로 변환
+        binary = binary.point(lambda x: 255 if x > threshold else 0, mode='1')
+        binary_red = red_channel.point(lambda x: 255 if x > threshold else 0, mode='1')
+        packets = bytearray()
+        channels = (binary, binary_red) if self.support_red else (binary,)
+        for img in channels:
+            pixels = img.getdata()
+            byte = 0
+            bit = 7
+            for pix in pixels:
+                if pix > 0:
+                    byte |= 1 << bit
+                bit -= 1
+                if bit < 0:
+                    packets.append(byte)
+                    byte = 0
+                    bit = 7
+            if bit != 7:
+                packets.append(byte)
+        return list(packets)
 
-                bit_position -= 1
-
-                if bit_position < 0:
-                    byte_data.append(current_byte)
-                    byte_data_red.append(current_byte_red)
-                    current_byte = 0
-                    current_byte_red = 0
-                    bit_position = 7
-            
-        if bit_position != 7:
-            byte_data.append(current_byte)
-            byte_data_red.append(current_byte_red)
-
-        for byte in byte_data:
-            image_packet.append(byte)
-
-        if red:
-            for byte in byte_data_red:
-                image_packet.append(byte)
-        _LOGGER.info("Packet %s", len(image_packet))
-        return image_packet
-
-    def get_cmd_packet(self, cmd):
-        width, height = self._device.resolution
-        red = self._device.red
+    def _make_cmd_packet(self, cmd: int) -> bytes:
         if cmd == 0x02:
-            size = (width * height) // 8
-            if red:
-                size *= 2
-            packet = bytearray(8)  # cmd(1) + size(4) + 고정된 바이트(3)
+            packet = bytearray(8)
             packet[0] = cmd
-            struct.pack_into('<I', packet, 1, size)
-            packet[-3:] = b'\x00\x00\x00'
-        else:
-            packet = bytearray([cmd])
-        return packet
-    
-    def get_img_packet(self, part):
-        width, height = self._device.resolution
-        red = self._device.red
-        total_size = (width * height) // 8
-        if red:
-            total_size *= 2
-        start_idx = part * 240
-        len_to_send = min(240, total_size - start_idx)
-        packet = bytearray(4 + len_to_send)
-        struct.pack_into('<I', packet, 0, part)
-        packet[4:] = self.image_packet[start_idx:start_idx + len_to_send]
-        return packet
+            struct.pack_into("<I", packet, 1, self.packet_size)
+            packet[-3:] = b"\x00\x00\x00"
+            return bytes(packet)
+        return bytes([cmd])
+
+    def _make_img_packet(self, part: int) -> bytes:
+        start = part * 240
+        chunk = self.image_packets[start : start + min(240, self.packet_size - start)]
+        packet = bytearray(4 + len(chunk))
+        struct.pack_into("<I", packet, 0, part)
+        packet[4:] = bytes(chunk)
+        return bytes(packet)

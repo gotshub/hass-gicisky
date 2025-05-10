@@ -176,8 +176,8 @@ class GiciskyClient:
                         break
                     part = int.from_bytes(data[2:6], "little")
                     count += 1
-                    # if part != count:
-                    #     raise Exception(f"Count Error: {part} {count}")
+                    if part != count:
+                        raise Exception(f"Count Error: {part} {count}")
                 else:
                     break
         except Exception as e:
@@ -187,12 +187,12 @@ class GiciskyClient:
 
 
     def get_pixel_data(self, image: Image) -> list[int]:
-        lum_threshold = 150
-        red_threshold = 150
+        lum_threshold = 100
+        red_threshold = 100
         tft = False
         rotation = False
         # RGB 모드로 변환 및 크기 가져오기
-        img = image.convert('RGB')
+        img = image
         width = self.width 
         height = self.height
 

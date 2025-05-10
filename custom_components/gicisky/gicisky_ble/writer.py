@@ -4,6 +4,7 @@ from __future__ import annotations
 from enum import Enum
 import logging
 import struct
+import time
 from typing import Any, Callable, TypeVar
 from asyncio import Event, wait_for, sleep
 from PIL import Image
@@ -111,15 +112,21 @@ class GiciskyClient:
         _LOGGER.debug("noti Received: %s", data.hex())
 
     async def read(self, timeout: float = 30.0) -> bytes:
-        await wait_for(self.event.wait(), timeout)
+        #await wait_for(self.event.wait(), timeout)
+        start = time.monotonic()
+        while self.command_data == None:
+            if time.monotonic() - start > timeout:
+                raise Exception(f"Timeout")
+            await sleep(0.05)
+
         data = self.command_data or b""
-        self.command_data = None
-        self.event.clear()
         _LOGGER.debug("Received: %s", data.hex())
         await sleep(0.05)
         return data
 
     async def write_with_response(self, uuid, packet: bytes) -> bytes:
+        self.command_data = None
+        self.event.clear()
         await self.write(uuid, packet)
         return await self.read()
     

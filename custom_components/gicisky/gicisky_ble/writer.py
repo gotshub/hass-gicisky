@@ -1,18 +1,10 @@
 from __future__ import annotations
 
-import dataclasses
 import logging
-import asyncio
-import abc
-import enum
-import math
 import struct
-import time
-import os
 
-from PIL import Image, ImageOps
 from bleak import BleakClient, BleakError
-from typing import Any, Callable, Tuple, TypeVar, cast
+from typing import Any, Callable, TypeVar, cast
 from asyncio import Event, wait_for, sleep
 from bleak.backends.device import BLEDevice
 from bleak_retry_connector import establish_connection

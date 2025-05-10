@@ -8,7 +8,8 @@ class DeviceEntry:
     resolution: tuple
     red: bool = True
     manufacturer: str = "Gicisky"
-
+    max_voltage: float = 2.9
+    min_voltage: float = 2.9
 
 
 
@@ -61,19 +62,7 @@ DEVICE_TYPES: dict[int, DeviceEntry] = {
         name="EPD 42",
         model="EPD 42 BWR",
         resolution=(400, 300),
+        max_voltage=3.0
     ),
 
-}
-
-
-SLEEPY_DEVICE_MODELS = {
-    "CGH1",
-    "JTYJGD03MI",
-    "MCCGQ02HL",
-    "RTCGQ02LM",
-    "MMC-W505",
-    "RS1BB(MI)",
-    "XMOSB01XS",
-    "MJTZC01YM",
-    "HS1BB(MI)",
 }

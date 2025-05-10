@@ -136,6 +136,7 @@ class GiciskyClient:
     async def write_image(self, image: Image) -> None:
         _LOGGER.debug("Write Image")
         part = 0
+        count = 0
         status = self.Status.START
         self.image_packets = self.get_pixel_data(image)
         try:
@@ -163,6 +164,9 @@ class GiciskyClient:
                     if len(data) < 6 or data[0] != 0x05 or data[1] != 0x00:
                         break
                     part = int.from_bytes(data[2:6], "little")
+                    count += 1
+                    if part != count:
+                        raise Exception(f"Count Error: {part} {count}")
                 else:
                     break
         except Exception as e:
@@ -223,6 +227,7 @@ class GiciskyClient:
         # 두 번째 색상 포함 여부에 따라 합치기
         combined = byte_data + byte_data_red if self.support_red else byte_data
 
+        _LOGGER.debug(f"Image width:{width}, height:{height}, Len:{len(combined)}")
         # bytearray로 변환하여 반환
         return list(bytearray(combined))
 

@@ -65,10 +65,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
     address = entry.unique_id
     assert address is not None
 
-    kwargs = {}
-    if bindkey := entry.data.get(CONF_BINDKEY):
-        kwargs[CONF_BINDKEY] = bytes.fromhex(bindkey)
-    data = GiciskyBluetoothDeviceData(**kwargs)
+    data = GiciskyBluetoothDeviceData()
 
     device_registry = dr.async_get(hass)
     event_classes = set(entry.data.get(CONF_DISCOVERED_EVENT_CLASSES, ()))

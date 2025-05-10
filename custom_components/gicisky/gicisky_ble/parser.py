@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from enum import Enum
 from typing import Any
 
 from bluetooth_sensor_state_data import BluetoothData
@@ -22,7 +21,7 @@ def to_mac(addr: bytes) -> str:
 class GiciskyBluetoothDeviceData(BluetoothData):
     """Data for BTHome Bluetooth devices."""
 
-    def __init__(self, bindkey: bytes | None = None) -> None:
+    def __init__(self) -> None:
         super().__init__()
 
         # The last service_info we saw that had a payload
@@ -59,7 +58,7 @@ class GiciskyBluetoothDeviceData(BluetoothData):
 
         # determine the device type
         device_id = data[0]
-        bettery_mv = data[1] / 10
+        bettery = data[1]
         firmware = (data[2] << 8) + data[3]
         try:
             device = DEVICE_TYPES[device_id]
@@ -68,11 +67,7 @@ class GiciskyBluetoothDeviceData(BluetoothData):
             return False
 
         self.device = device
-        device_type = device.model
-
         self.device_id = device_id
-        self.device_type = device_type
-
         identifier = service_info.address.replace(":", "")[-8:]
         self.set_title(f"{identifier} ({device.model})")
         self.set_device_name(f"{device.manufacturer} {identifier}")
@@ -80,7 +75,7 @@ class GiciskyBluetoothDeviceData(BluetoothData):
         self.set_device_manufacturer(device.manufacturer)
         self.set_device_sw_version(firmware)
 
-        volt = bettery_mv
+        volt = bettery / 10
         min = device.min_voltage
         max = device.max_voltage
         batt = (volt - min) * 100 / (max - min)

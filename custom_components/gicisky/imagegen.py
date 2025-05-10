@@ -186,7 +186,7 @@ def customimage(entity_id, device, service, hass):
             d = ImageDraw.Draw(img)
             d.fontmode = "1"
             size = element.get('size', 20)
-            font_name = element.get('font', "ppb.ttf")
+            font_name = element.get('font', "fonts/NotoSansKR-Regular.ttf")
             font_file = get_font_file(font_name, hass)
             font = ImageFont.truetype(font_file, size)
             if not "y" in element:
@@ -212,7 +212,7 @@ def customimage(entity_id, device, service, hass):
             d = ImageDraw.Draw(img)
             d.fontmode = "1"
             size = element.get('size', 20)
-            font_name = element.get('font', "ppb.ttf")
+            font_name = element.get('font', "fonts/NotoSansKR-Regular.ttf")
             font_file = get_font_file(font_name, hass)
             font = ImageFont.truetype(font_file, size)
             color = element.get('color', "black")
@@ -233,8 +233,8 @@ def customimage(entity_id, device, service, hass):
             d = ImageDraw.Draw(img)
             d.fontmode = "1"
             # ttf from https://github.com/Templarian/MaterialDesign-Webfont/blob/master/fonts/materialdesignicons-webfont.ttf
-            font_file = os.path.join(os.path.dirname(__file__), 'materialdesignicons-webfont.ttf')
-            meta_file = os.path.join(os.path.dirname(__file__), "materialdesignicons-webfont_meta.json") 
+            font_file = os.path.join(os.path.dirname(__file__), 'fonts/materialdesignicons-webfont.ttf')
+            meta_file = os.path.join(os.path.dirname(__file__), "fonts/materialdesignicons-webfont_meta.json") 
             f = open(meta_file)
             data = json.load(f)
             chr_hex = ""
@@ -370,7 +370,7 @@ def customimage(entity_id, device, service, hass):
             img_draw = ImageDraw.Draw(img)
             d = ImageDraw.Draw(img)
             d.fontmode = "1"
-            font_name = element.get('font', "ppb.ttf")
+            font_name = element.get('font', "fonts/NotoSansKR-Regular.ttf")
             pos_x = element['x']
             pos_y = element['y']
             width = element.get('width', canvas_width)
@@ -423,7 +423,7 @@ def customimage(entity_id, device, service, hass):
             start = end - duration
             # The label font and size
             size = element.get("size", 10)
-            font_file = element.get("font", "ppb.ttf")
+            font_file = element.get("font", "fonts/NotoSansKR-Regular.ttf")
             abs_font_file = os.path.join(os.path.dirname(__file__), font_file)
             font = ImageFont.truetype(abs_font_file, size)
             # The value legend
@@ -595,7 +595,7 @@ def customimage(entity_id, device, service, hass):
             # display percentage text if enabled
             if show_percentage:
                 font_size = min(y_end - y_start - 4, x_end - x_start - 4, 20)  # Adjust max font size as needed
-                font = ImageFont.truetype(os.path.join(os.path.dirname(__file__), 'ppb.ttf'), font_size)
+                font = ImageFont.truetype(os.path.join(os.path.dirname(__file__), 'fonts/NotoSansKR-Regular.ttf'), font_size)
                 percentage_text = f"{progress}%"
 
                 # Calculate text position

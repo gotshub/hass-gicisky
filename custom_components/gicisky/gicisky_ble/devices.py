@@ -9,7 +9,7 @@ class DeviceEntry:
     red: bool = True
     manufacturer: str = "Gicisky"
     max_voltage: float = 2.9
-    min_voltage: float = 2.9
+    min_voltage: float = 2.2
 
 
 

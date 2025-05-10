@@ -48,20 +48,20 @@ def process_service_info(
     data = coordinator.device_data
     update = data.update(service_info)
 
-    sensor_device_info = next(iter(update.devices.values()), None)
-    if sensor_device_info:
-        address = service_info.device.address
-        device = device_registry.async_get_or_create(
-            config_entry_id=entry.entry_id,
-            connections={(CONNECTION_BLUETOOTH, address)},
-            identifiers={(BLUETOOTH_DOMAIN, address)},
-            manufacturer=sensor_device_info.manufacturer,
-            model=sensor_device_info.model,
-            name=sensor_device_info.name,
-            sw_version=sensor_device_info.sw_version,
-            hw_version=sensor_device_info.hw_version,
-        )
-    _LOGGER.info("process_service_info: %s", update)
+    # sensor_device_info = next(iter(update.devices.values()), None)
+    # if sensor_device_info:
+    #     address = service_info.device.address
+    #     device = device_registry.async_get_or_create(
+    #         config_entry_id=entry.entry_id,
+    #         connections={(CONNECTION_BLUETOOTH, address)},
+    #         identifiers={(BLUETOOTH_DOMAIN, address)},
+    #         manufacturer=sensor_device_info.manufacturer,
+    #         model=sensor_device_info.model,
+    #         name=sensor_device_info.name,
+    #         sw_version=sensor_device_info.sw_version,
+    #         hw_version=sensor_device_info.hw_version,
+    #     )
+    # _LOGGER.info("process_service_info: %s", update)
     discovered_event_classes = coordinator.discovered_event_classes
     if entry.data.get(CONF_SLEEPY_DEVICE, False) != data.sleepy_device:
         hass.config_entries.async_update_entry(

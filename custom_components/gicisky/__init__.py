@@ -62,6 +62,9 @@ def format_discovered_event_class(address: str) -> SignalType[str, GiciskyBleEve
 
 async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> bool:
     """Set up Gicisky Bluetooth from a config entry."""
+    if DOMAIN not in hass.data:
+        hass.data[DOMAIN] = {}
+        
     address = entry.unique_id
     assert address is not None
 

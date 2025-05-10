@@ -102,7 +102,7 @@ class GiciskyClient:
     @disconnect_on_missing_services
     async def write(self, uuid: str, data: bytes) -> None:
         _LOGGER.debug("Write UUID=%s data=%s", uuid, len(data))
-        chunk = 80
+        chunk = 160
         for i in range(0, len(data), chunk):
             await self.client.write_gatt_char(uuid, data[i : i + chunk])
             await sleep(0.05)

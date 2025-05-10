@@ -171,7 +171,7 @@ class GiciskyClient:
                     status = self.Status.IMAGE_DATA
 
                 elif status == self.Status.IMAGE_DATA:  
-                    data = await self.write_image_with_response(count)
+                    data = await self.write_image_with_response(part)
                     if len(data) < 6 or data[0] != 0x05 or data[1] != 0x00:
                         break
                     part = int.from_bytes(data[2:6], "little")

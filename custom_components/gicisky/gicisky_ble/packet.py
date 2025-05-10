@@ -120,9 +120,9 @@ class GiciskyClient:
         _LOGGER.debug("Received: %s", data.hex())
         return data
 
-    async def write_cmd(self, packet: bytes) -> bytes:
+    async def write_cmd(self, uuid, packet: bytes) -> bytes:
         """명령 패킷 쓰기 후 응답 대기"""
-        await self.write(self.cmd_uuid, packet)
+        await self.write(uuid, packet)
         return await self.read()
 
     async def write_image(self, binary: tuple) -> None:
@@ -130,19 +130,19 @@ class GiciskyClient:
         _LOGGER.info("이미지 전송 시작")
         self.image_packets = self._make_image_packets(binary)
         try:
-            data = await self.write_cmd(self._make_cmd_packet(0x01))
+            data = await self.write_cmd(self.cmd_uuid, self._make_cmd_packet(0x01))
             while data:
                 cmd = data[0]
                 if cmd == 0x01:
                     if len(data) < 3 or data[1] != 0xF4 or data[2] != 0x00:
                         break
-                    data = await self.write_cmd(self._make_cmd_packet(0x02))
+                    data = await self.write_cmd(self.cmd_uuid, self._make_cmd_packet(0x02))
                 elif cmd == 0x02:
-                    data = await self.write_cmd(self._make_cmd_packet(0x03))
+                    data = await self.write_cmd(self.cmd_uuid, self._make_cmd_packet(0x03))
                 elif cmd == 0x05:
                     if len(data) >= 6 and data[1] == 0x00:
                         part = int.from_bytes(data[2:6], "little")
-                        data = await self.write_cmd(self._make_img_packet(part))
+                        data = await self.write_cmd(self.img_uuid, self._make_img_packet(part))
                     else:
                         break
                 else:

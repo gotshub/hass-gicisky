@@ -200,4 +200,4 @@ class GiciskyBluetoothBinarySensorEntity(
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
-        return self.processor.coordinator.sleepy_device or super().available
+        return super().available

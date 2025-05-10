@@ -7,7 +7,6 @@ import dataclasses
 from typing import Any
 
 from .gicisky_ble import GiciskyBluetoothDeviceData as DeviceData
-from .gicisky_ble.parser import EncryptionScheme
 import voluptuous as vol
 
 from homeassistant.components import onboarding
@@ -61,43 +60,7 @@ class GiciskyConfigFlow(ConfigFlow, domain=DOMAIN):
         self._discovery_info = discovery_info
         self._discovered_device = device
 
-        if device.encryption_scheme == EncryptionScheme.GICISKY_BINDKEY:
-            return await self.async_step_get_encryption_key()
         return await self.async_step_bluetooth_confirm()
-
-    async def async_step_get_encryption_key(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Enter a bindkey for an encrypted Gicisky device."""
-        assert self._discovery_info
-        assert self._discovered_device
-
-        errors = {}
-
-        if user_input is not None:
-            bindkey: str = user_input["bindkey"]
-
-            if len(bindkey) != 32:
-                errors["bindkey"] = "expected_32_characters"
-            else:
-                self._discovered_device.set_bindkey(bytes.fromhex(bindkey))
-
-                # If we got this far we already know supported will
-                # return true so we don't bother checking that again
-                # We just want to retry the decryption
-                self._discovered_device.supported(self._discovery_info)
-
-                if self._discovered_device.bindkey_verified:
-                    return self._async_get_or_create_entry(bindkey)
-
-                errors["bindkey"] = "decryption_failed"
-
-        return self.async_show_form(
-            step_id="get_encryption_key",
-            description_placeholders=self.context["title_placeholders"],
-            data_schema=vol.Schema({vol.Required("bindkey"): vol.All(str, vol.Strip)}),
-            errors=errors,
-        )
 
     async def async_step_bluetooth_confirm(
         self, user_input: dict[str, Any] | None = None
@@ -126,9 +89,6 @@ class GiciskyConfigFlow(ConfigFlow, domain=DOMAIN):
 
             self._discovery_info = discovery.discovery_info
             self._discovered_device = discovery.device
-
-            if discovery.device.encryption_scheme == EncryptionScheme.GICISKY_BINDKEY:
-                return await self.async_step_get_encryption_key()
 
             return self._async_get_or_create_entry()
 
@@ -165,9 +125,6 @@ class GiciskyConfigFlow(ConfigFlow, domain=DOMAIN):
         self._discovered_device = device
 
         self._discovery_info = device.last_service_info
-
-        if device.encryption_scheme == EncryptionScheme.GICISKY_BINDKEY:
-            return await self.async_step_get_encryption_key()
 
         # Otherwise there wasn't actually encryption so abort
         return self.async_abort(reason="reauth_successful")

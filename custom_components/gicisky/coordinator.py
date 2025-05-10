@@ -15,7 +15,6 @@ from homeassistant.components.bluetooth.passive_update_processor import (
 )
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_SLEEPY_DEVICE
 from .types import GiciskyConfigEntry
 
 
@@ -41,11 +40,6 @@ class GiciskyPassiveBluetoothProcessorCoordinator(
         self.discovered_event_classes = discovered_event_classes
         self.device_data = device_data
         self.entry = entry
-
-    @property
-    def sleepy_device(self) -> bool:
-        """Return True if the device is a sleepy device."""
-        return self.entry.data.get(CONF_SLEEPY_DEVICE, self.device_data.sleepy_device)
 
 
 class GiciskyPassiveBluetoothDataProcessor[_T](

@@ -126,6 +126,11 @@ async def get_entry_id_from_device(hass, device_id: str) -> str:
     if not device_entry.config_entries:
         raise ValueError(f"No config entries for device {device_id}")
 
-    _LOGGER.info(f"{device_id} to {device_entry.config_entries}")
-    entry_id = device_entry.config_entries[0]
+    _LOGGER.debug(f"{device_id} to {device_entry.config_entries}")
+    try:
+        entry_id = next(iter(device_entry.config_entries))
+    except StopIteration:
+        _LOGGER.error("%s None", device_id)
+        return None
+
     return entry_id

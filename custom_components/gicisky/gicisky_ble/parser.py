@@ -84,12 +84,7 @@ class GiciskyBluetoothDeviceData(BluetoothData):
         self.update_predefined_sensor(
             SensorLibrary.VOLTAGE__ELECTRIC_POTENTIAL_VOLT, round(volt, 1)
         )
-        self.update_predefined_binary_sensor(
-            BinarySensorDeviceClass.CONNECTIVITY, False
-        )
+        # self.update_predefined_binary_sensor(
+        #     BinarySensorDeviceClass.CONNECTIVITY, False
+        # )
         return True
-    def update_connectivity(self, conn):
-        self.update_predefined_binary_sensor(
-            BinarySensorDeviceClass.CONNECTIVITY, conn
-        )
-        return self.update(self.last_service_info)

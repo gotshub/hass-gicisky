@@ -6,7 +6,8 @@ from functools import partial
 import logging
 from .imagegen import *
 from .gicisky_ble import GiciskyBluetoothDeviceData, SensorUpdate
-from .gicisky_ble.writer import write_image
+#from .gicisky_ble.writer import write_image
+from .gicisky_ble.packet import write_image
 from homeassistant.components.bluetooth import (
     DOMAIN as BLUETOOTH_DOMAIN,
     BluetoothScanningMode,
@@ -89,9 +90,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
     async def writeservice(service: ServiceCall) -> None:
         ble_device = async_ble_device_from_address(hass, address)
         binary = await hass.async_add_executor_job(customimage, entry.entry_id, data.device, service, hass)
-        entry.runtime_data.device_data.update_connectivity(True)
-        await write_image(ble_device, data.device, binary)
-        entry.runtime_data.device_data.update_connectivity(False)             
+        await write_image(ble_device, data.device, binary)            
 
     # register the services
     hass.services.async_register(DOMAIN, "write", writeservice)

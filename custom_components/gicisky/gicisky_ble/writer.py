@@ -101,7 +101,7 @@ class GiciskyClient:
 
     @disconnect_on_missing_services
     async def write(self, uuid: str, data: bytes) -> None:
-        _LOGGER.debug("Write UUID=%s data=%s", uuid, data.hex())
+        _LOGGER.debug("Write UUID=%s data=%s", uuid, len(data))
         for i in range(0, len(data), 20):
             await self.client.write_gatt_char(uuid, data[i : i + 20])
             await sleep(0.05)
@@ -111,17 +111,17 @@ class GiciskyClient:
         self.event.set()
         _LOGGER.debug("noti Received: %s", data.hex())
 
-    async def read(self, timeout: float = 30.0) -> bytes:
-        #await wait_for(self.event.wait(), timeout)
-        start = time.monotonic()
-        while self.command_data == None:
-            if time.monotonic() - start > timeout:
-                raise Exception(f"Timeout")
-            await sleep(0.05)
+    async def read(self, timeout: float = 5.0) -> bytes:
+        _LOGGER.debug("Read")
+        await wait_for(self.event.wait(), timeout)
+        # start = time.monotonic()
+        # while self.command_data == None:
+        #     if time.monotonic() - start > timeout:
+        #         raise Exception(f"Timeout")
+        #     await sleep(0.05)
 
         data = self.command_data or b""
         _LOGGER.debug("Received: %s", data.hex())
-        await sleep(0.05)
         return data
 
     async def write_with_response(self, uuid, packet: bytes) -> bytes:

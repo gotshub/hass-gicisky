@@ -99,7 +99,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
 
         # Process each device
         for device_id in device_ids:
-            entry_id = get_entry_id_from_device(hass, device_id)
+            entry_id = await get_entry_id_from_device(hass, device_id)
             address = hass.data[DOMAIN][entry_id]['address']
             data = hass.data[DOMAIN][entry_id]['data']
             ble_device = async_ble_device_from_address(hass, address)
@@ -126,6 +126,6 @@ async def get_entry_id_from_device(hass, device_id: str) -> str:
     if not device_entry.config_entries:
         raise ValueError(f"No config entries for device {device_id}")
 
-    _LOGGER.debug(f"{device_id} to {device_entry.config_entries}")
+    _LOGGER.info(f"{device_id} to {device_entry.config_entries}")
     entry_id = device_entry.config_entries[0]
     return entry_id

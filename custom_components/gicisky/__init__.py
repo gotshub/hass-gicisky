@@ -89,9 +89,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
     async def writeservice(service: ServiceCall) -> None:
         ble_device = async_ble_device_from_address(hass, address)
         binary = await hass.async_add_executor_job(customimage, entry.entry_id, data.device, service, hass)
-        data.update_connectivity(True)
+        entry.runtime_data.device_data.update_connectivity(True)
         await write_image(ble_device, data.device, binary)
-        data.update_connectivity(False)             
+        entry.runtime_data.device_data.update_connectivity(False)             
 
     # register the services
     hass.services.async_register(DOMAIN, "write", writeservice)

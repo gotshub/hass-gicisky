@@ -108,6 +108,7 @@ class GiciskyClient:
     def _notification_handler(self, _: Any, data: bytearray) -> None:
         self.command_data = bytes(data)
         self.event.set()
+        _LOGGER.debug("noti Received: %s", data.hex())
 
     async def read(self, timeout: float = 30.0) -> bytes:
         await wait_for(self.event.wait(), timeout)
@@ -115,6 +116,7 @@ class GiciskyClient:
         self.command_data = None
         self.event.clear()
         _LOGGER.debug("Received: %s", data.hex())
+        await sleep(0.05)
         return data
 
     async def write_with_response(self, uuid, packet: bytes) -> bytes:

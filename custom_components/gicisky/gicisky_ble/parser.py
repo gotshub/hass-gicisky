@@ -92,4 +92,4 @@ class GiciskyBluetoothDeviceData(BluetoothData):
         self.update_predefined_binary_sensor(
             BinarySensorDeviceClass.CONNECTIVITY, conn
         )
-        return self._finish_update()
+        return self.update()

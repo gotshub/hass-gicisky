@@ -3,8 +3,8 @@
   "name": "Gicisky",
   "bluetooth": [
     {
-      "connectable": true,
-      "service_data_uuid": "0000fef0-0000-1000-8000-00805f9b34fb"
+      "manufacturer_id": 20563,
+      "connectable": true
     }
   ],
   "codeowners": ["@eigger"],

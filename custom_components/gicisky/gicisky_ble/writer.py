@@ -134,10 +134,10 @@ class GiciskyClient:
         return await self.write_with_response(self.img_uuid, self._make_img_packet(part))
     
     async def write_image(self, image: Image) -> None:
-        _LOGGER.info("Write Image")
+        _LOGGER.debug("Write Image")
         part = 0
         status = self.Status.START
-        self.image_packets = self._make_image_packets(image)
+        self.image_packets = self.get_pixel_data(image)
         try:
             while True:
                 if status == self.Status.START:
@@ -168,7 +168,63 @@ class GiciskyClient:
         except Exception as e:
             _LOGGER.error("Write Error: %s", e)
         finally:
-            _LOGGER.info("Finish")
+            _LOGGER.debug("Finish")
+
+
+    def get_pixel_data(self, image: Image) -> list[int]:
+        lum_threshold = 150
+        red_threshold = 150
+        tft = False
+        rotation = False
+        # RGB 모드로 변환 및 크기 가져오기
+        img = image.convert('RGB')
+        width = self.width 
+        height = self.height
+
+        # TFT 모드일 때 리사이징: 너비 1/2, 높이 2배
+        if tft:
+            img = img.resize((width // 2, height * 2), resample=Image.BICUBIC)
+            width, height = img.size
+
+        pixels = img.load()
+
+        byte_data = []
+        byte_data_red = []
+        current_byte = 0
+        current_byte_red = 0
+        bit_pos = 7
+
+        for x in range(width):
+            for y in range(height):
+                # 회전 모드 시 인덱스 변경
+                px = (y, x) if rotation else (x, y)
+                r, g, b = pixels[px]
+
+                # 휘도 계산
+                luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+                if luminance > lum_threshold:
+                    current_byte |= (1 << bit_pos)
+                if (r > red_threshold) and (g < red_threshold):
+                    current_byte_red |= (1 << bit_pos)
+
+                bit_pos -= 1
+                if bit_pos < 0:
+                    byte_data.append(current_byte)
+                    byte_data_red.append(current_byte_red)
+                    current_byte = 0
+                    current_byte_red = 0
+                    bit_pos = 7
+
+        # 남은 비트 처리
+        if bit_pos != 7:
+            byte_data.append(current_byte)
+            byte_data_red.append(current_byte_red)
+
+        # 두 번째 색상 포함 여부에 따라 합치기
+        combined = byte_data + byte_data_red if self.support_red else byte_data
+
+        # bytearray로 변환하여 반환
+        return list(bytearray(combined))
 
     def _make_image_packets(self, image: Image) -> list[int]:
         threshold = 195

@@ -65,7 +65,7 @@ class GiciskyBluetoothDeviceData(BluetoothData):
         try:
             device = DEVICE_TYPES[device_id]
         except KeyError:
-            _LOGGER.info("Unknown Gicisky device found. Data: %s", data.hex())
+            _LOGGER.error("Unknown Gicisky device found. Data: %s", data.hex())
             return False
 
         self.device = device

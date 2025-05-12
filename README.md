@@ -59,3 +59,8 @@ data:
 target:
   device_id: <your device>
 ```
+
+## References
+- [OpenEPaperLink](https://github.com/OpenEPaperLink/Home_Assistant_Integration.git)
+- [bthome](https://github.com/home-assistant/core/tree/dev/homeassistant/components/bthome)
+- [bthome-ble](https://github.com/Bluetooth-Devices/bthome-ble.git)

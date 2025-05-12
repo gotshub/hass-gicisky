@@ -4,6 +4,7 @@ from __future__ import annotations
 from enum import Enum
 import logging
 import struct
+import traceback
 from typing import Any, Callable, TypeVar
 from asyncio import Event, wait_for, sleep
 from PIL import Image
@@ -61,7 +62,8 @@ async def update_image(
         await gicisky.stop_notify()
         return True
     except Exception as e:
-        _LOGGER.error("Fail image write: %s", e)       
+        _LOGGER.error("Fail image write: %s", e)
+        _LOGGER.error(traceback.print_exc())
         return False
     finally:
         if client and client.is_connected:
@@ -186,28 +188,27 @@ class GiciskyClient:
         position: tuple[int, int] = (0, 0),
         center: bool = False
     ) -> Image:
-        w_base, h_base = base.size
-        ov = overlay.copy()
+        if base.mode != 'RGB':
+            base_rgb = base.convert('RGB')
+        else:
+            base_rgb = base.copy()
+
+        w_base, h_base = base_rgb.size
+
+        ov = overlay.convert('RGB')
         if ov.width > w_base or ov.height > h_base:
             ov = ov.crop((0, 0, w_base, h_base))
 
-        if base.mode != 'RGBA':
-            base_rgba = base.convert('RGBA')
-        else:
-            base_rgba = base.copy()
-        if ov.mode != 'RGBA':
-            ov = ov.convert('RGBA')
-
         if center:
-            x = (w_base - ov.width)  // 2
+            x = (w_base - ov.width) // 2
             y = (h_base - ov.height) // 2
             position = (x, y)
 
-        base_rgba.paste(ov, position, ov)
-        return base_rgba
+        base_rgb.paste(ov, position)
+        return base_rgb
 
     def _make_image_packet(self, image: Image, threshold: int, red_threshold: int) -> list[int]:
-        img = Image.new('RGBA', (self.width, self.height), color='white')
+        img = Image.new('RGB', (self.width, self.height), color='white')
         img = self._overlay_images(img, image)
         tft = self.tft
         rotation = self.rotation

@@ -4,7 +4,6 @@ from __future__ import annotations
 from enum import Enum
 import logging
 import struct
-import time
 from typing import Any, Callable, TypeVar
 from asyncio import Event, wait_for, sleep
 from PIL import Image
@@ -47,7 +46,6 @@ async def update_image(
     try:
         client = await establish_connection(BleakClient, ble_device, ble_device.address)
         services = client.services
-        # SERVICE_GICISKY 특성 UUID 수집
         char_uuids = [
             c.uuid
             for svc in services if svc.uuid == SERVICE_GICISKY
@@ -61,7 +59,7 @@ async def update_image(
         await gicisky.stop_notify()
         return True
     except Exception as e:
-        _LOGGER.error("Fail image write: %s", e)
+        _LOGGER.error("Fail image write: %s", e)       
         return False
     finally:
         if client and client.is_connected:
@@ -85,6 +83,9 @@ class GiciskyClient:
         self.width = device.width
         self.height = device.height
         self.support_red = device.red
+        self.tft = device.tft
+        self.rotation = device.rotation
+        self.mirror = device.mirror
         self.packet_size = (device.width * device.height) // 8 * (2 if device.red else 1)
         self.event: Event = Event()
         self.command_data: bytes | None = None
@@ -102,7 +103,7 @@ class GiciskyClient:
     @disconnect_on_missing_services
     async def write(self, uuid: str, data: bytes) -> None:
         _LOGGER.debug("Write UUID=%s data=%s", uuid, len(data))
-        chunk = 160
+        chunk = len(data)
         for i in range(0, len(data), chunk):
             await self.client.write_gatt_char(uuid, data[i : i + chunk])
             await sleep(0.05)
@@ -111,17 +112,9 @@ class GiciskyClient:
         if self.command_data == None:
             self.command_data = bytes(data)
             self.event.set()
-        _LOGGER.debug("noti Received: %s", data.hex())
 
     async def read(self, timeout: float = 5.0) -> bytes:
-        _LOGGER.debug("Read")
         await wait_for(self.event.wait(), timeout)
-        # start = time.monotonic()
-        # while self.command_data == None:
-        #     if time.monotonic() - start > timeout:
-        #         raise Exception(f"Timeout")
-        #     await sleep(0.05)
-
         data = self.command_data or b""
         _LOGGER.debug("Received: %s", data.hex())
         return data
@@ -142,14 +135,13 @@ class GiciskyClient:
         return await self.write_with_response(self.cmd_uuid, self._make_cmd_packet(0x03))
 
     async def write_image_with_response(self, part:int) -> bytes:
-        return await self.write_with_response(self.img_uuid, self._make_img_packet(part))
+        return await self.write_with_response(self.img_uuid, self._make_size_packet(part))
     
     async def write_image(self, image: Image) -> None:
-        _LOGGER.debug("Write Image")
         part = 0
         count = 0
         status = self.Status.START
-        self.image_packets = self.get_pixel_data(image)
+        self.image_packets = self._make_image_packet(image)
         try:
             while True:
                 if status == self.Status.START:
@@ -186,21 +178,20 @@ class GiciskyClient:
             _LOGGER.debug("Finish")
 
 
-    def get_pixel_data(self, image: Image) -> list[int]:
+    def _make_image_packet(self, image: Image) -> list[int]:
         lum_threshold = 100
         red_threshold = 100
-        tft = False
-        rotation = False
-        # RGB 모드로 변환 및 크기 가져오기
+        tft = self.tft
+        rotation = self.rotation
         img = image
-        width = self.width 
-        height = self.height
-
-        # TFT 모드일 때 리사이징: 너비 1/2, 높이 2배
+        width, height = img.size
         if tft:
             img = img.resize((width // 2, height * 2), resample=Image.BICUBIC)
-            width, height = img.size
 
+        if rotation != 0:
+            img = img.rotate(rotation, expand=True)
+
+        width, height = img.size
         pixels = img.load()
 
         byte_data = []
@@ -209,13 +200,11 @@ class GiciskyClient:
         current_byte_red = 0
         bit_pos = 7
 
-        for x in range(width):
-            for y in range(height):
-                # 회전 모드 시 인덱스 변경
-                px = (y, x) if rotation else (x, y)
+        for y in range(height):
+            for x in range(width - 1, -1, -1) if self.mirror else range(width):
+                px = (x, y)
                 r, g, b = pixels[px]
 
-                # 휘도 계산
                 luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
                 if luminance > lum_threshold:
                     current_byte |= (1 << bit_pos)
@@ -230,41 +219,12 @@ class GiciskyClient:
                     current_byte_red = 0
                     bit_pos = 7
 
-        # 남은 비트 처리
         if bit_pos != 7:
             byte_data.append(current_byte)
             byte_data_red.append(current_byte_red)
 
-        # 두 번째 색상 포함 여부에 따라 합치기
         combined = byte_data + byte_data_red if self.support_red else byte_data
-
-        _LOGGER.debug(f"Image width:{width}, height:{height}, Len:{len(combined)},{self.packet_size}")
-        # bytearray로 변환하여 반환
         return list(bytearray(combined))
-
-    def _make_image_packets(self, image: Image) -> list[int]:
-        threshold = 195
-        red_channel = image.split()[0]  # R (Red) 채널 추출
-        binary = image.convert('L')  # 그레이스케일로 변환
-        binary = binary.point(lambda x: 255 if x > threshold else 0, mode='1')
-        binary_red = red_channel.point(lambda x: 255 if x > threshold else 0, mode='1')
-        packets = bytearray()
-        channels = (binary, binary_red) if self.support_red else (binary,)
-        for img in channels:
-            pixels = img.getdata()
-            byte = 0
-            bit = 7
-            for pix in pixels:
-                if pix > 0:
-                    byte |= 1 << bit
-                bit -= 1
-                if bit < 0:
-                    packets.append(byte)
-                    byte = 0
-                    bit = 7
-            if bit != 7:
-                packets.append(byte)
-        return list(packets)
 
     def _make_cmd_packet(self, cmd: int) -> bytes:
         if cmd == 0x02:
@@ -275,7 +235,7 @@ class GiciskyClient:
             return bytes(packet)
         return bytes([cmd])
 
-    def _make_img_packet(self, part: int) -> bytes:
+    def _make_size_packet(self, part: int) -> bytes:
         start = part * 240
         chunk = self.image_packets[start : start + min(240, self.packet_size - start)]
         packet = bytearray(4 + len(chunk))

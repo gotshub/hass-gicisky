@@ -110,7 +110,7 @@ class GiciskyClient:
         chunk = 20 # len(data)
         for i in range(0, len(data), chunk):
             await self.client.write_gatt_char(uuid, data[i : i + chunk])
-            await sleep(0.01)
+            #await sleep(0.01)
 
     def _notification_handler(self, _: Any, data: bytearray) -> None:
         if self.command_data == None:

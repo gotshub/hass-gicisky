@@ -40,7 +40,9 @@ def disconnect_on_missing_services(func: WrapFuncType) -> WrapFuncType:
 async def update_image(
     ble_device: BLEDevice,
     device: DeviceEntry,
-    image: Image
+    image: Image,
+    threshold: int,
+    red_threshold: int
 ) -> bool:
     client: BleakClient | None = None
     try:
@@ -55,7 +57,7 @@ async def update_image(
             raise BleakServiceMissing(f"UUID Len: {len(char_uuids)}")
         gicisky = GiciskyClient(client, char_uuids, device)
         await gicisky.start_notify()
-        await gicisky.write_image(image)
+        await gicisky.write_image(image, threshold, red_threshold)
         await gicisky.stop_notify()
         return True
     except Exception as e:
@@ -137,11 +139,11 @@ class GiciskyClient:
     async def write_image_with_response(self, part:int) -> bytes:
         return await self.write_with_response(self.img_uuid, self._make_size_packet(part))
     
-    async def write_image(self, image: Image) -> None:
+    async def write_image(self, image: Image, threshold: int, red_threshold: int) -> None:
         part = 0
         count = 0
         status = self.Status.START
-        self.image_packets = self._make_image_packet(image)
+        self.image_packets = self._make_image_packet(image, threshold, red_threshold)
         try:
             while True:
                 if status == self.Status.START:
@@ -177,13 +179,38 @@ class GiciskyClient:
         finally:
             _LOGGER.debug("Finish")
 
+    def _overlay_images(
+        self,
+        base: Image,
+        overlay: Image,
+        position: tuple[int, int] = (0, 0),
+        center: bool = False
+    ) -> Image:
+        w_base, h_base = base.size
+        ov = overlay.copy()
+        if ov.width > w_base or ov.height > h_base:
+            ov = ov.crop((0, 0, w_base, h_base))
 
-    def _make_image_packet(self, image: Image) -> list[int]:
-        lum_threshold = 100
-        red_threshold = 100
+        if base.mode != 'RGBA':
+            base_rgba = base.convert('RGBA')
+        else:
+            base_rgba = base.copy()
+        if ov.mode != 'RGBA':
+            ov = ov.convert('RGBA')
+
+        if center:
+            x = (w_base - ov.width)  // 2
+            y = (h_base - ov.height) // 2
+            position = (x, y)
+
+        base_rgba.paste(ov, position, ov)
+        return base_rgba
+
+    def _make_image_packet(self, image: Image, threshold: int, red_threshold: int) -> list[int]:
+        img = Image.new('RGBA', (self.width, self.height), color='white')
+        img = self._overlay_images(img, image)
         tft = self.tft
         rotation = self.rotation
-        img = image
         width, height = img.size
         if tft:
             img = img.resize((width // 2, height * 2), resample=Image.BICUBIC)
@@ -206,7 +233,7 @@ class GiciskyClient:
                 r, g, b = pixels[px]
 
                 luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
-                if luminance > lum_threshold:
+                if luminance > threshold:
                     current_byte |= (1 << bit_pos)
                 if (r > red_threshold) and (g < red_threshold):
                     current_byte_red |= (1 << bit_pos)

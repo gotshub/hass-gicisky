@@ -103,8 +103,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
             address = hass.data[DOMAIN][entry_id]['address']
             data = hass.data[DOMAIN][entry_id]['data']
             ble_device = async_ble_device_from_address(hass, address)
+            threshold = int(service.data.get("threshold", 128))
+            red_threshold = int(service.data.get("red_threshold", 128))
             image = await hass.async_add_executor_job(customimage, entry_id, data.device, service, hass)
-            await update_image(ble_device, data.device, image)            
+            await update_image(ble_device, data.device, image, threshold, red_threshold)            
 
     # register the services
     hass.services.async_register(DOMAIN, "write", writeservice)

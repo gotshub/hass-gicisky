@@ -13,7 +13,6 @@ from bleak.backends.device import BLEDevice
 from bleak_retry_connector import establish_connection
 
 from .devices import DeviceEntry
-from .const import SERVICE_GICISKY
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -51,7 +50,7 @@ async def update_image(
         services = client.services
         char_uuids = [
             c.uuid
-            for svc in services if svc.uuid == SERVICE_GICISKY
+            for svc in services if svc.uuid.lower().startswith("0000f")
             for c in svc.characteristics
         ]
         if len(char_uuids) != 3:

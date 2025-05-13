@@ -2,8 +2,6 @@ from sensor_state_data import (
     BaseDeviceClass,
 )
 
-SERVICE_GICISKY = "0000fef0-0000-1000-8000-00805f9b34fb"
-
 class ExtendedSensorDeviceClass(BaseDeviceClass):
     """Device class for additional sensors (compared to sensor-state-data)."""
 

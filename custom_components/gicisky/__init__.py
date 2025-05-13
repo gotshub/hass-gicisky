@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import partial
 import logging
+from asyncio import sleep
 from .imagegen import *
 from .gicisky_ble import GiciskyBluetoothDeviceData, SensorUpdate
 from .gicisky_ble.writer import update_image
@@ -16,9 +17,9 @@ from homeassistant.components.bluetooth import (
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH, DeviceRegistry
-from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.device_registry import DeviceRegistry
 from homeassistant.util.signal_type import SignalType
+from homeassistant.exceptions import HomeAssistantError
 
 from .const import (
     CONF_BINDKEY,
@@ -106,7 +107,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
             threshold = int(service.data.get("threshold", 128))
             red_threshold = int(service.data.get("red_threshold", 128))
             image = await hass.async_add_executor_job(customimage, entry_id, data.device, service, hass)
-            await update_image(ble_device, data.device, image, threshold, red_threshold)            
+
+            max_retries = 3
+            for attempt in range(1, max_retries + 1):
+                success = await update_image(ble_device, data.device, image, threshold, red_threshold)
+                if success:
+                    break
+
+                _LOGGER.warning("Write failed to %s (attempt %d/%d)", address, attempt, max_retries)
+                if attempt < max_retries:
+                    await sleep(1)
+
+            else:
+                raise HomeAssistantError(f"Failed to write to {address} after {max_retries} attempts")    
 
     # register the services
     hass.services.async_register(DOMAIN, "write", writeservice)

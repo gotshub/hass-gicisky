@@ -59,7 +59,7 @@ data:
 target:
   device_id: <your device>
 ```
-
+## [Gicisky Image Edit & Uploader](https://eigger.github.io/Gicisky_Image_Uploader.html)
 ## References
 - [OpenEPaperLink](https://github.com/OpenEPaperLink/Home_Assistant_Integration.git)
 - [bthome](https://github.com/home-assistant/core/tree/dev/homeassistant/components/bthome)

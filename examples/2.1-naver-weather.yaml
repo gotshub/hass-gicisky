@@ -1,0 +1,55 @@
+alias: 네이버 날씨 라벨 2.1
+description: ""
+triggers:
+  - trigger: time
+    at: "08:00:00"
+  - trigger: time
+    at: "11:00:00"
+  - trigger: time
+    at: "14:00:00"
+  - trigger: time
+    at: "17:00:00"
+conditions: []
+actions:
+  - action: gicisky.write
+    data:
+      payload:
+        - type: icon
+          value: |
+            {% set weather = states('weather.naver') %}
+            weather-{{ 'night' if weather == 'clear-night' else weather }}
+          anchor: lm
+          x: 5
+          "y": 64
+          size: 100
+          color: black
+        - type: text
+          value: "{{ state_attr('weather.naver', 'friendly_name') }}"
+          font: fonts/NotoSansKR-Medium.ttf
+          anchor: rt
+          x: 245
+          "y": 25
+          size: 40
+          color: black
+        - type: text
+          value: >
+            {{ state_attr('weather.naver', 'temperature') }}{{
+            state_attr('weather.naver', 'temperature_unit') }}
+          font: fonts/NotoSansKR-Bold.ttf
+          anchor: rb
+          x: 245
+          "y": 110
+          size: 40
+          color: black
+        - type: text
+          value: "{{ now().strftime('%H시') }} 기준"
+          font: fonts/NotoSansKR-Medium.ttf
+          anchor: rt
+          x: 240
+          "y": 5
+          size: 15
+          color: black
+    target:
+      device_id:
+        - 05315aa301183818e27d239ee9b7da5a
+mode: single

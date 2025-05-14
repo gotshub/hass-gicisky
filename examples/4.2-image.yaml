@@ -1,0 +1,18 @@
+alias: 이미지 라벨
+description: ""
+triggers: []
+conditions: []
+actions:
+  - action: gicisky.write
+    data:
+      payload:
+        - type: dlimg
+          url: http://localhost:8123/local/images/image.png
+          x: 0
+          "y": 0
+          xsize: 400
+          ysize: 300
+          rotate: 0
+    target:
+      device_id: dfce78828e18592acb89c4282eacfd70
+mode: single

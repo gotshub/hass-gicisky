@@ -1,0 +1,440 @@
+alias: 네이버 날씨 라벨 4.2
+description: ""
+triggers:
+  - trigger: time
+    at: "08:00:00"
+  - trigger: time
+    at: "11:00:00"
+  - trigger: time
+    at: "14:00:00"
+  - trigger: time
+    at: "17:00:00"
+conditions: []
+actions:
+  - variables:
+      weather: null
+  - action: weather.get_forecasts
+    target:
+      entity_id: weather.naver
+    data:
+      type: daily
+    response_variable: weather
+  - action: gicisky.write
+    data:
+      payload:
+        - type: text
+          value: >-
+            {{ weather['weather.naver'].forecast[0].temperature | string
+            }}{{ state_attr('weather.naver','temperature_unit') }}
+          font: fonts/NotoSansKR-Bold.ttf
+          x: 144
+          "y": 80
+          size: 15
+          color: >-
+            {{'black' if weather['weather.naver'].forecast[0].temperature
+            > severe_temp_low else 'red' }}
+          anchor: mt
+        - type: icon
+          value: >-
+            {% set weather =
+            weather['weather.naver'].forecast[0].condition | string %}
+            weather-{{ 'night' if weather == 'clear-night' else weather }}
+          x: 124
+          "y": 31
+          size: 40
+          color: >-
+            {{'red' if weather['weather.naver'].forecast[0].condition in
+            severe_forecast else 'black' }}
+        - type: text
+          value: >-
+            {{ weather['weather.naver'].forecast[1].temperature | string
+            }}{{ state_attr('weather.naver','temperature_unit') }}
+          font: fonts/NotoSansKR-Bold.ttf
+          x: 216
+          "y": 80
+          size: 15
+          color: >-
+            {{'black' if weather['weather.naver'].forecast[1].temperature
+            > severe_temp_low else 'red' }}
+          anchor: mt
+        - type: icon
+          value: >-
+            {% set weather =
+            weather['weather.naver'].forecast[1].condition | string %}
+            weather-{{ 'night' if weather == 'clear-night' else weather }}
+          x: 196
+          "y": 31
+          size: 40
+          color: >-
+            {{'red' if weather['weather.naver'].forecast[1].condition in
+            severe_forecast else 'black' }}
+        - type: text
+          value: >-
+            {{ weather['weather.naver'].forecast[2].temperature | string
+            }}{{ state_attr('weather.naver','temperature_unit') }}
+          font: fonts/NotoSansKR-Bold.ttf
+          x: 288
+          "y": 80
+          size: 15
+          color: >-
+            {{'black' if weather['weather.naver'].forecast[2].temperature
+            > severe_temp_low else 'red' }}
+          anchor: mt
+        - type: icon
+          value: >-
+            {% set weather =
+            weather['weather.naver'].forecast[2].condition | string %}
+            weather-{{ 'night' if weather == 'clear-night' else weather }}
+          x: 268
+          "y": 31
+          size: 40
+          color: >-
+            {{'red' if weather['weather.naver'].forecast[2].condition in
+            severe_forecast else 'black' }}
+        - type: text
+          value: >-
+            {{ weather['weather.naver'].forecast[3].temperature | string
+            }}{{ state_attr('weather.naver','temperature_unit') }}
+          font: fonts/NotoSansKR-Bold.ttf
+          x: 360
+          "y": 80
+          size: 15
+          color: >-
+            {{'black' if weather['weather.naver'].forecast[3].temperature
+            > severe_temp_low else 'red' }}
+          anchor: mt
+        - type: icon
+          value: >-
+            {% set weather =
+            weather['weather.naver'].forecast[3].condition | string %}
+            weather-{{ 'night' if weather == 'clear-night' else weather }}
+          x: 340
+          "y": 31
+          size: 40
+          color: >-
+            {{'red' if weather['weather.naver'].forecast[3].condition in
+            severe_forecast else 'black' }}
+        - type: text
+          value: >-
+            {{ weather['weather.naver'].forecast[4].temperature | string
+            }}
+          font: fonts/NotoSansKR-Medium.ttf
+          x: 140
+          "y": 229
+          size: 13
+          color: >-
+            {{'black' if weather['weather.naver'].forecast[4].temperature
+            > severe_temp_low else 'red' }}
+          anchor: rt
+        - type: text
+          value: /
+          font: fonts/NotoSansKR-Medium.ttf
+          x: 144
+          "y": 229
+          size: 13
+          color: black
+          anchor: mt
+        - type: text
+          value: "{{ weather['weather.naver'].forecast[4].templow | string }}"
+          font: fonts/NotoSansKR-Medium.ttf
+          x: 148
+          "y": 229
+          size: 13
+          color: >-
+            {{'black' if weather['weather.naver'].forecast[4].templow >
+            severe_temp_low else 'red' }}
+          anchor: lt
+        - type: icon
+          value: >-
+            {% set weather =
+            weather['weather.naver'].forecast[4].condition | string %}
+            weather-{{ 'night' if weather == 'clear-night' else weather }}
+          x: 128
+          "y": 180
+          size: 40
+          color: >-
+            {{'red' if weather['weather.naver'].forecast[4].condition in
+            severe_forecast else 'black' }}
+        - type: text
+          value: >-
+            {{ weather['weather.naver'].forecast[5].temperature | string
+            }}
+          font: fonts/NotoSansKR-Medium.ttf
+          x: 212
+          "y": 229
+          size: 13
+          color: >-
+            {{'black' if weather['weather.naver'].forecast[5].temperature
+            > severe_temp_low else 'red' }}
+          anchor: rt
+        - type: text
+          value: /
+          font: fonts/NotoSansKR-Medium.ttf
+          x: 216
+          "y": 229
+          size: 13
+          color: black
+          anchor: mt
+        - type: text
+          value: "{{ weather['weather.naver'].forecast[5].templow | string }}"
+          font: fonts/NotoSansKR-Medium.ttf
+          x: 220
+          "y": 229
+          size: 13
+          color: >-
+            {{'black' if weather['weather.naver'].forecast[5].templow >
+            severe_temp_low else 'red' }}
+          anchor: lt
+        - type: icon
+          value: >-
+            {% set weather =
+            weather['weather.naver'].forecast[5].condition | string %}
+            weather-{{ 'night' if weather == 'clear-night' else weather }}
+          x: 196
+          "y": 180
+          size: 40
+          color: >-
+            {{'red' if weather['weather.naver'].forecast[5].condition in
+            severe_forecast else 'black' }}
+        - type: text
+          value: >-
+            {{ weather['weather.naver'].forecast[6].temperature | string
+            }}
+          font: fonts/NotoSansKR-Medium.ttf
+          x: 284
+          "y": 229
+          size: 13
+          color: >-
+            {{'black' if weather['weather.naver'].forecast[6].temperature
+            > severe_temp_low else 'red' }}
+          anchor: rt
+        - type: text
+          value: /
+          font: fonts/NotoSansKR-Medium.ttf
+          x: 288
+          "y": 229
+          size: 13
+          color: black
+          anchor: mt
+        - type: text
+          value: "{{ weather['weather.naver'].forecast[6].templow | string }}"
+          font: fonts/NotoSansKR-Medium.ttf
+          x: 292
+          "y": 229
+          size: 13
+          color: >-
+            {{'black' if weather['weather.naver'].forecast[6].templow >
+            severe_temp_low else 'red' }}
+          anchor: lt
+        - type: icon
+          value: >-
+            {% set weather =
+            weather['weather.naver'].forecast[6].condition | string %}
+            weather-{{ 'night' if weather == 'clear-night' else weather }}
+          x: 268
+          "y": 180
+          size: 40
+          color: >-
+            {{'red' if weather['weather.naver'].forecast[6].condition in
+            severe_forecast else 'black' }}
+        - type: text
+          value: >-
+            {{ weather['weather.naver'].forecast[7].temperature | string
+            }}
+          font: fonts/NotoSansKR-Medium.ttf
+          x: 356
+          "y": 229
+          size: 13
+          color: >-
+            {{'black' if weather['weather.naver'].forecast[7].temperature
+            > severe_temp_low else 'red' }}
+          anchor: rt
+        - type: text
+          value: /
+          font: fonts/NotoSansKR-Medium.ttf
+          x: 360
+          "y": 229
+          size: 13
+          color: black
+          anchor: mt
+        - type: text
+          value: "{{ weather['weather.naver'].forecast[7].templow | string }}"
+          font: fonts/NotoSansKR-Medium.ttf
+          x: 364
+          "y": 229
+          size: 13
+          color: >-
+            {{'black' if weather['weather.naver'].forecast[7].templow >
+            severe_temp_low else 'red' }}
+          anchor: lt
+        - type: icon
+          value: >-
+            {% set weather =
+            weather['weather.naver'].forecast[7].condition | string %}
+            weather-{{ 'night' if weather == 'clear-night' else weather }}
+          x: 340
+          "y": 180
+          size: 40
+          color: >-
+            {{'red' if weather['weather.naver'].forecast[7].condition in
+            severe_forecast else 'black' }}
+        - type: text
+          value: >-
+            {{
+            as_timestamp(weather['weather.naver'].forecast[0].datetime) |
+            timestamp_custom('%d', true) }}일
+          font: fonts/NotoSansKR-Bold.ttf
+          x: 144
+          "y": 5
+          size: 24
+          color: black
+          anchor: mt
+        - type: text
+          value: >-
+            {{
+            as_timestamp(weather['weather.naver'].forecast[1].datetime) |
+            timestamp_custom('%d', true) }}일
+          font: fonts/NotoSansKR-Bold.ttf
+          x: 216
+          "y": 5
+          size: 24
+          color: black
+          anchor: mt
+        - type: text
+          value: >-
+            {{
+            as_timestamp(weather['weather.naver'].forecast[2].datetime) |
+            timestamp_custom('%d', true) }}일
+          font: fonts/NotoSansKR-Bold.ttf
+          x: 288
+          "y": 5
+          size: 24
+          color: black
+          anchor: mt
+        - type: text
+          value: >-
+            {{
+            as_timestamp(weather['weather.naver'].forecast[3].datetime) |
+            timestamp_custom('%d', true) }}일
+          font: fonts/NotoSansKR-Bold.ttf
+          x: 360
+          "y": 5
+          size: 24
+          color: black
+          anchor: mt
+        - type: text
+          value: >-
+            {{
+            as_timestamp(weather['weather.naver'].forecast[4].datetime) |
+            timestamp_custom('%d', true) }}일
+          font: fonts/NotoSansKR-Bold.ttf
+          x: 144
+          "y": 154
+          size: 24
+          color: black
+          anchor: mt
+        - type: text
+          value: >-
+            {{
+            as_timestamp(weather['weather.naver'].forecast[5].datetime) |
+            timestamp_custom('%d', true) }}일
+          font: fonts/NotoSansKR-Bold.ttf
+          x: 216
+          "y": 154
+          size: 24
+          color: black
+          anchor: mt
+        - type: text
+          value: >-
+            {{
+            as_timestamp(weather['weather.naver'].forecast[6].datetime) |
+            timestamp_custom('%d', true) }}일
+          font: fonts/NotoSansKR-Bold.ttf
+          x: 288
+          "y": 154
+          size: 24
+          color: black
+          anchor: mt
+        - type: text
+          value: >-
+            {{
+            as_timestamp(weather['weather.naver'].forecast[7].datetime) |
+            timestamp_custom('%d', true) }}일
+          font: fonts/NotoSansKR-Bold.ttf
+          x: 360
+          "y": 154
+          size: 24
+          color: black
+          anchor: mt
+        - type: text
+          value: >-
+            {% set day_map = {
+                'Monday': '월',
+                'Tuesday': '화',
+                'Wednesday': '수',
+                'Thursday': '목',
+                'Friday': '금',
+                'Saturday': '토',
+                'Sunday': '일'
+            } %}  {{ now().strftime('%d일') }}({{ day_map[now().strftime('%A')]
+            }}) 
+          font: fonts/NotoSansKR-Bold.ttf
+          anchor: mt
+          x: 55
+          "y": 5
+          size: 24
+          color: black
+        - type: text
+          value: "{{ state_attr('weather.naver', 'friendly_name') }}"
+          font: fonts/NotoSansKR-Bold.ttf
+          anchor: mt
+          x: 55
+          "y": 150
+          size: 30
+          color: black
+        - type: text
+          value: "{{ now().strftime('%H시') }} 기준"
+          font: fonts/NotoSansKR-Bold.ttf
+          anchor: mt
+          x: 55
+          "y": 185
+          size: 15
+          color: black
+        - type: text
+          value: >-
+            {{ state_attr('weather.naver','temperature') | round | int(0)
+            }}{{ state_attr('weather.naver','temperature_unit') }}
+          font: fonts/NotoSansKR-Bold.ttf
+          x: 55
+          "y": 110
+          size: 32
+          anchor: mt
+          color: >-
+            {{'black' if state_attr('weather.naver','temperature') |
+            round > severe_temp_low else 'red' }}
+        - type: icon
+          value: >-
+            {% set weather = states('weather.naver') | string %}
+            weather-{{ 'night' if weather == 'clear-night' else weather }}
+          x: 20
+          "y": 30
+          size: 76
+          color: >-
+            {{'red' if states('weather.naver') in severe_forecast else
+            'black' }}
+    target:
+      device_id: 8f69c732cd0aef9a2c879f5de5634445
+variables:
+  severe_forecast:
+    - fog
+    - hail
+    - lightning
+    - lightning-rainy
+    - pouring
+    - snowy
+    - snowy-rainy
+    - windy
+    - windy-variant
+    - exceptional
+  severe_temp_low: 3
+mode: single

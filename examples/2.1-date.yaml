@@ -32,7 +32,9 @@ actions:
           x: 125
           "y": 108
           size: 45
-          color: red
+          color: |
+            {% set date = now().strftime('%A') %}
+            {{ 'red' if date == 'Saturday' or date == 'Sunday' else 'black' }}
     target:
       device_id: 84cd077d3c883242348f7a2ce0fb3c75
 mode: single

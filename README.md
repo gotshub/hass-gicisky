@@ -32,7 +32,9 @@ repository into the `custom_components/gicisky` directory.
 
 ### [4.2" Image](https://github.com/eigger/hass-gicisky/blob/master/examples/4.2-image.yaml)
 <img src=https://github.com/eigger/hass-gicisky/blob/master/examples/4.2-image.jpg>
-  - Homeassistant path = /config/www/images/image.png
+
+  #### Homeassistant image path = /config/www/images/image.png
+  #### [Gicisky Image Edit & Uploader](https://eigger.github.io/Gicisky_Image_Uploader.html)
 
 ### [4.2" Naver Weather](https://github.com/eigger/hass-gicisky/blob/master/examples/4.2-naver-weather.yaml)
 <img src=https://github.com/eigger/hass-gicisky/blob/master/examples/4.2-naver-weather.jpg>
@@ -74,7 +76,6 @@ data:
 target:
   device_id: <your device>
 ```
-## [Gicisky Image Edit & Uploader](https://eigger.github.io/Gicisky_Image_Uploader.html)
 ## References
 - [OpenEPaperLink](https://github.com/OpenEPaperLink/Home_Assistant_Integration.git)
 - [bthome](https://github.com/home-assistant/core/tree/dev/homeassistant/components/bthome)

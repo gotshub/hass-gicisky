@@ -49,5 +49,11 @@ DEVICE_TYPES: dict[int, DeviceEntry] = {
         height=300,
         max_voltage=3.0
     ),
-
+    0x2B: DeviceEntry(
+        name="EPD 75",
+        model="EPD 7.5\" BWR",
+        width=800,
+        height=480,
+        max_voltage=3.0
+    ),
 }

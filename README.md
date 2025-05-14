@@ -21,6 +21,21 @@ repository into the `custom_components/gicisky` directory.
 4. Please select a discovered Gicisky device from the list.
    
 ## Examples
+### [2.1" Date](https://github.com/eigger/hass-gicisky/blob/master/examples/2.1-date.yaml)
+<img src=https://github.com/eigger/hass-gicisky/blob/master/examples/2.1-date.jpg>
+
+### [2.1" Naver Weather](https://github.com/eigger/hass-gicisky/blob/master/examples/2.1-naver-weather.yaml)
+<img src=https://github.com/eigger/hass-gicisky/blob/master/examples/2.1-naver-weather.jpg>
+
+### [2.1" Wifi](https://github.com/eigger/hass-gicisky/blob/master/examples/2.1-wifi.yaml)
+<img src=https://github.com/eigger/hass-gicisky/blob/master/examples/2.1-wifi.jpg>
+
+### [4.2" Image](https://github.com/eigger/hass-gicisky/blob/master/examples/4.2-image.yaml)
+<img src=https://github.com/eigger/hass-gicisky/blob/master/examples/4.2-image.jpg>
+  - Homeassistant path = /config/www/images/image.png
+
+### [4.2" Naver Weather](https://github.com/eigger/hass-gicisky/blob/master/examples/4.2-naver-weather.yaml)
+<img src=https://github.com/eigger/hass-gicisky/blob/master/examples/4.2-naver-weather.jpg>
 
 ```
 action: gicisky.write

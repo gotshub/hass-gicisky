@@ -20,8 +20,28 @@ actions:
             weather-{{ 'night' if weather == 'clear-night' else weather }}
           anchor: lm
           x: 5
-          "y": 64
-          size: 100
+          "y": 45
+          size: 90
+          color: black
+        - type: text
+          value: |
+            {% set rain = states('sensor.bisijagsiganoneul') %}
+            {{ rain }}{{ ' 비옴' if rain != '비안옴'}}
+          font: fonts/NotoSansKR-Medium.ttf
+          anchor: mb
+          x: 45
+          "y": 110
+          size: 20
+          color: |
+            {% set rain = states('sensor.bisijagsiganoneul') %}
+            {{ 'black' if rain == '비안옴' else 'red' }}
+        - type: text
+          value: "{{ state_attr('weather.naver', 'friendly_name') }}"
+          font: fonts/NotoSansKR-Medium.ttf
+          anchor: rt
+          x: 245
+          "y": 25
+          size: 40
           color: black
         - type: text
           value: "{{ state_attr('weather.naver', 'friendly_name') }}"
@@ -49,6 +69,7 @@ actions:
           "y": 5
           size: 15
           color: black
+
     target:
       device_id:
         - 05315aa301183818e27d239ee9b7da5a

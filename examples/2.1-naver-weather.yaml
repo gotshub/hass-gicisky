@@ -28,10 +28,10 @@ actions:
             {% set rain = states('sensor.bisijagsiganoneul') %}
             {{ rain }}{{ ' 비옴' if rain != '비안옴'}}
           font: fonts/GmarketSansTTFBold.ttf
-          anchor: mb
-          x: 45
+          anchor: lb
+          x: 5
           "y": 115
-          size: 25
+          size: 21
           color: |
             {% set rain = states('sensor.bisijagsiganoneul') %}
             {{ 'black' if rain == '비안옴' else 'red' }}

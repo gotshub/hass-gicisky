@@ -7,7 +7,7 @@ actions:
     data:
       payload:
         - type: dlimg
-          url: http://localhost:8123/local/images/image.png
+          url: /config/www/images/image.png
           x: 0
           "y": 0
           xsize: 400

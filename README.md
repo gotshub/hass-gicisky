@@ -33,7 +33,6 @@ repository into the `custom_components/gicisky` directory.
 ### [4.2" Image](https://github.com/eigger/hass-gicisky/blob/master/examples/4.2-image.yaml)
 <img src=https://github.com/eigger/hass-gicisky/blob/master/examples/4.2-image.jpg>
 
-  #### Homeassistant image path = /config/www/images/image.png
   #### [Gicisky Image Edit & Uploader](https://eigger.github.io/Gicisky_Image_Uploader.html)
 
 ### [4.2" Naver Weather](https://github.com/eigger/hass-gicisky/blob/master/examples/4.2-naver-weather.yaml)

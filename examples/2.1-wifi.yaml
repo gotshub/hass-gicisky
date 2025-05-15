@@ -8,7 +8,7 @@ actions:
       payload:
         - type: text
           value: WIFI
-          font: fonts/NotoSansKR-Bold.ttf
+          font: fonts/GmarketSansTTFBold.ttf
           anchor: mt
           x: 180
           "y": 20
@@ -16,11 +16,11 @@ actions:
           color: black
         - type: text
           value: 카메라로 스캔하세요
-          font: fonts/NotoSansKR-Bold.ttf
+          font: fonts/GmarketSansTTFBold.ttf
           anchor: mt
           x: 180
           "y": 64
-          size: 17
+          size: 15
           color: black
         - type: qrcode
           data: WIFI:T:WPA2;S:ssid;P:passwod;;

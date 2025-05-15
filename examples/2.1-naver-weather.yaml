@@ -27,27 +27,27 @@ actions:
           value: |
             {% set rain = states('sensor.bisijagsiganoneul') %}
             {{ rain }}{{ ' 비옴' if rain != '비안옴'}}
-          font: fonts/NotoSansKR-Medium.ttf
+          font: fonts/GmarketSansTTFBold.ttf
           anchor: mb
           x: 45
-          "y": 110
-          size: 20
+          "y": 115
+          size: 25
           color: |
             {% set rain = states('sensor.bisijagsiganoneul') %}
             {{ 'black' if rain == '비안옴' else 'red' }}
         - type: text
           value: "{{ state_attr('weather.naver', 'friendly_name') }}"
-          font: fonts/NotoSansKR-Medium.ttf
+          font: fonts/GmarketSansTTFBold.ttf
           anchor: rt
           x: 245
-          "y": 25
+          "y": 30
           size: 40
           color: black
         - type: text
           value: >
             {{ state_attr('weather.naver', 'temperature') }}{{
             state_attr('weather.naver', 'temperature_unit') }}
-          font: fonts/NotoSansKR-Bold.ttf
+          font: fonts/GmarketSansTTFBold.ttf
           anchor: rb
           x: 245
           "y": 110
@@ -55,11 +55,11 @@ actions:
           color: black
         - type: text
           value: "{{ now().strftime('%H시') }} 기준"
-          font: fonts/NotoSansKR-Medium.ttf
+          font: fonts/GmarketSansTTFBold.ttf
           anchor: rt
           x: 240
           "y": 5
-          size: 15
+          size: 20
           color: black
 
     target:

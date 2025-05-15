@@ -44,14 +44,6 @@ actions:
           size: 40
           color: black
         - type: text
-          value: "{{ state_attr('weather.naver', 'friendly_name') }}"
-          font: fonts/NotoSansKR-Medium.ttf
-          anchor: rt
-          x: 245
-          "y": 25
-          size: 40
-          color: black
-        - type: text
           value: >
             {{ state_attr('weather.naver', 'temperature') }}{{
             state_attr('weather.naver', 'temperature_unit') }}

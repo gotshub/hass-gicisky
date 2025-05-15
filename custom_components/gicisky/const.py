@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Final, TypedDict
 
 DOMAIN = "gicisky"
-
+LOCK = "lock"
 CONF_BINDKEY: Final = "bindkey"
 CONF_DISCOVERED_EVENT_CLASSES: Final = "known_events"
 CONF_SUBTYPE: Final = "subtype"

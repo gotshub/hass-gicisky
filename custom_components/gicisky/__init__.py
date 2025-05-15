@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import partial
 import logging
-from asyncio import sleep
+from asyncio import sleep, Lock
 from .imagegen import *
 from .gicisky_ble import GiciskyBluetoothDeviceData, SensorUpdate
 from .gicisky_ble.writer import update_image
@@ -22,9 +22,9 @@ from homeassistant.util.signal_type import SignalType
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import (
-    CONF_BINDKEY,
     CONF_DISCOVERED_EVENT_CLASSES,
     DOMAIN,
+    LOCK,
     GiciskyBleEvent,
 )
 from .coordinator import GiciskyPassiveBluetoothProcessorCoordinator
@@ -33,7 +33,6 @@ from .types import GiciskyConfigEntry
 PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.EVENT, Platform.SENSOR]
 
 _LOGGER = logging.getLogger(__name__)
-
 
 def process_service_info(
     hass: HomeAssistant,
@@ -74,6 +73,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
     hass.data[DOMAIN][entry.entry_id]['address'] = address
     hass.data[DOMAIN][entry.entry_id]['data'] = data
 
+    if LOCK not in hass.data[DOMAIN]:
+        hass.data[DOMAIN][LOCK] = Lock()
+
     device_registry = dr.async_get(hass)
     event_classes = set(entry.data.get(CONF_DISCOVERED_EVENT_CLASSES, ()))
     coordinator = GiciskyPassiveBluetoothProcessorCoordinator(
@@ -94,32 +96,34 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
     @callback
     # callback for the draw custom service
     async def writeservice(service: ServiceCall) -> None:
-        device_ids = service.data.get("device_id")
-        if isinstance(device_ids, str):
-            device_ids = [device_ids]
+        lock = hass.data[DOMAIN][LOCK]
+        async with lock:
+            device_ids = service.data.get("device_id")
+            if isinstance(device_ids, str):
+                device_ids = [device_ids]
 
-        # Process each device
-        for device_id in device_ids:
-            entry_id = await get_entry_id_from_device(hass, device_id)
-            address = hass.data[DOMAIN][entry_id]['address']
-            data = hass.data[DOMAIN][entry_id]['data']
-            ble_device = async_ble_device_from_address(hass, address)
-            threshold = int(service.data.get("threshold", 128))
-            red_threshold = int(service.data.get("red_threshold", 128))
-            image = await hass.async_add_executor_job(customimage, entry_id, data.device, service, hass)
+            # Process each device
+            for device_id in device_ids:
+                entry_id = await get_entry_id_from_device(hass, device_id)
+                address = hass.data[DOMAIN][entry_id]['address']
+                data = hass.data[DOMAIN][entry_id]['data']
+                ble_device = async_ble_device_from_address(hass, address)
+                threshold = int(service.data.get("threshold", 128))
+                red_threshold = int(service.data.get("red_threshold", 128))
+                image = await hass.async_add_executor_job(customimage, entry_id, data.device, service, hass)
 
-            max_retries = 3
-            for attempt in range(1, max_retries + 1):
-                success = await update_image(ble_device, data.device, image, threshold, red_threshold)
-                if success:
-                    break
+                max_retries = 3
+                for attempt in range(1, max_retries + 1):
+                    success = await update_image(ble_device, data.device, image, threshold, red_threshold)
+                    if success:
+                        break
 
-                _LOGGER.warning("Write failed to %s (attempt %d/%d)", address, attempt, max_retries)
-                if attempt < max_retries:
-                    await sleep(1)
+                    _LOGGER.warning("Write failed to %s (attempt %d/%d)", address, attempt, max_retries)
+                    if attempt < max_retries:
+                        await sleep(1)
 
-            else:
-                raise HomeAssistantError(f"Failed to write to {address} after {max_retries} attempts")    
+                else:
+                    raise HomeAssistantError(f"Failed to write to {address} after {max_retries} attempts")    
 
     # register the services
     hass.services.async_register(DOMAIN, "write", writeservice)

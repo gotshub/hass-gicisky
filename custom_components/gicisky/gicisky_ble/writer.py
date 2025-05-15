@@ -57,11 +57,11 @@ async def update_image(
             raise BleakServiceMissing(f"UUID Len: {len(char_uuids)}")
         gicisky = GiciskyClient(client, char_uuids, device)
         await gicisky.start_notify()
-        await gicisky.write_image(image, threshold, red_threshold)
+        success = await gicisky.write_image(image, threshold, red_threshold)
         await gicisky.stop_notify()
-        return True
+        return success
     except Exception as e:
-        _LOGGER.error("Fail image write: %s", e)
+        _LOGGER.error("Fail update: %s", e)
         _LOGGER.error(traceback.print_exc())
         return False
     finally:
@@ -174,9 +174,11 @@ class GiciskyClient:
                     if part != count:
                         raise Exception(f"Count Error: {part} {count}")
                 else:
-                    break
+                    raise Exception(f"Status Error: {status}")
+            return True
         except Exception as e:
-            _LOGGER.error("Write Error: %s", e)
+            _LOGGER.error("Fail write: %s", e)
+            return False
         finally:
             _LOGGER.debug("Finish")
 

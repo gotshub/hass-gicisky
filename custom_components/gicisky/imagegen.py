@@ -241,6 +241,7 @@ def customimage(entity_id, device, service, hass):
             value = element['value']
             if value.startswith("mdi:"):
                 value = value[4:]
+            value = map_weather_icon(value)
             for icon in data:
                 if icon['name'] == value:
                     chr_hex = icon['codepoint']
@@ -636,6 +637,19 @@ def check_for_missing_required_arguments(element, required_keys, func_name):
             missing_keys.append(key)
     if missing_keys:
         raise HomeAssistantError(f"Missing required argument(s) '{', '.join(missing_keys)}' in '{func_name}'")
+    
+def map_weather_icon(icon: str) -> str:
+    if icon.startswith("weather-"):
+        weather_mapping = {
+            "clear-night": "night",
+            "partlycloudy": "partly-cloudy",
+            "exceptional": "sunny-off"
+        }
+        clean_icon = icon.removeprefix("weather-")
+        mapped = weather_mapping.get(clean_icon, clean_icon)
+        return f"weather-{mapped}"
+    else:
+        return icon
 
 def rounded_corners(corner_string):
     if corner_string == "all":

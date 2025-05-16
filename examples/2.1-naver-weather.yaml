@@ -16,8 +16,7 @@ actions:
       payload:
         - type: icon
           value: |
-            {% set weather = states('weather.naver') %}
-            weather-{{ 'night' if weather == 'clear-night' else weather }}
+            weather-{{ states('weather.naver') }}
           anchor: lm
           x: 5
           "y": 45
@@ -25,16 +24,18 @@ actions:
           color: black
         - type: text
           value: |
-            {% set rain = states('sensor.bisijagsiganoneul') %}
-            {{ rain }}{{ ' 비옴' if rain != '비안옴'}}
+            {% set rain = states('sensor.sigandanggangsuryang') %}
+            {% set start = states('sensor.bisijagsiganoneul') %}
+            {{ '비 ' + rain + 'mm' if rain != '0' else start if start != '비안옴' else start }}
           font: fonts/GmarketSansTTFBold.ttf
           anchor: lb
           x: 5
           "y": 115
           size: 21
           color: |
-            {% set rain = states('sensor.bisijagsiganoneul') %}
-            {{ 'black' if rain == '비안옴' else 'red' }}
+            {% set rain = states('sensor.sigandanggangsuryang') %}
+            {% set start = states('sensor.bisijagsiganoneul') %}
+            {{ 'red' if rain != '0' else 'red' if start != '비안옴' else 'black' }}
         - type: text
           value: "{{ state_attr('weather.naver', 'friendly_name') }}"
           font: fonts/GmarketSansTTFBold.ttf
@@ -45,13 +46,21 @@ actions:
           color: black
         - type: text
           value: >
-            {{ state_attr('weather.naver', 'temperature') }}{{
-            state_attr('weather.naver', 'temperature_unit') }}
+            {{ state_attr('weather.naver', 'temperature') }}
+          font: fonts/GmarketSansTTFBold.ttf
+          anchor: rb
+          x: 215
+          "y": 110
+          size: 40
+          color: black
+        - type: text
+          value: >
+            {{ state_attr('weather.naver', 'temperature_unit') }}
           font: fonts/GmarketSansTTFBold.ttf
           anchor: rb
           x: 245
-          "y": 110
-          size: 40
+          "y": 100
+          size: 20
           color: black
         - type: text
           value: "{{ now().strftime('%H시') }} 기준"

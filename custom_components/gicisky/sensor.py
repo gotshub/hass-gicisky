@@ -20,6 +20,8 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import (
+    ATTR_SW_VERSION,
+    ATTR_HW_VERSION,
     CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
     CONCENTRATION_PARTS_PER_MILLION,
     DEGREE,
@@ -390,14 +392,21 @@ SENSOR_DESCRIPTIONS = {
     ),
 }
 
-
+def hass_device_info(sensor_device_info):
+    device_info = sensor_device_info_to_hass_device_info(sensor_device_info)
+    if sensor_device_info.sw_version is not None:
+        device_info[ATTR_SW_VERSION] = sensor_device_info.sw_version
+    if sensor_device_info.hw_version is not None:
+        device_info[ATTR_HW_VERSION] = sensor_device_info.hw_version
+    return device_info
+    
 def sensor_update_to_bluetooth_data_update(
     sensor_update: SensorUpdate,
 ) -> PassiveBluetoothDataUpdate[float | None]:
     """Convert a sensor update to a bluetooth data update."""
     return PassiveBluetoothDataUpdate(
         devices={
-            device_id: sensor_device_info_to_hass_device_info(device_info)
+            device_id: hass_device_info(device_info)
             for device_id, device_info in sensor_update.devices.items()
         },
         entity_descriptions={

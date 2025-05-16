@@ -75,8 +75,8 @@ class GiciskyBluetoothDeviceData(BluetoothData):
         self.set_device_name(f"{device.manufacturer} {identifier}")
         self.set_device_type(f"{device.model} {device.width}x{device.height}")
         self.set_device_manufacturer(device.manufacturer)
-        self.set_device_sw_version(f"{firmware}")
-        self.set_device_hw_version(f"{hardware}")
+        self.set_device_sw_version(f"{hex(firmware)}")
+        self.set_device_hw_version(f"{hex(hardware)}")
 
         volt = bettery / 10
         min = device.min_voltage

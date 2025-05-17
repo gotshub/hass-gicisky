@@ -34,7 +34,7 @@ DEVICE_TYPES: dict[int, DeviceEntry] = {
         rotation=270,
         mirror=True
     ),
-    0x32: DeviceEntry(
+    0x33: DeviceEntry(
         name="EPD 29",
         model="EPD 2.9\" BWR",
         width=296,

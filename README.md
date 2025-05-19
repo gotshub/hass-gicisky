@@ -19,6 +19,21 @@ repository into the `custom_components/gicisky` directory.
 2. Restart Home Assistant.
 3. Go to Settings / Integrations and add integration "Gicisky"
 4. Please select a discovered Gicisky device from the list.
+
+## ⚠️ Important Notice
+- It is **strongly recommended to use a Bluetooth proxy instead of a built-in Bluetooth adapter**.  
+  Bluetooth proxies generally offer better range and reliability, especially in environments with multiple BLE devices.
+- When using a Bluetooth proxy, it is strongly recommended to **keep the scan interval at its default value**.  
+  Changing these values may cause issues with Bluetooth data transmission.
+  
+  Example (recommended configuration with default values):
+
+  ```yaml
+  esp32_ble_tracker:
+    scan_parameters:
+      #interval: 1100ms
+      #window: 1100ms
+      active: true
    
 ## Examples
 ### [2.1" Date](https://github.com/eigger/hass-gicisky/blob/master/examples/2.1-date.yaml)

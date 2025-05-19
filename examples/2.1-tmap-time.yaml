@@ -1,0 +1,70 @@
+alias: 출근 예상시간 라벨
+description: ""
+triggers:
+  - trigger: time
+    at: "07:30:00"
+conditions: []
+actions:
+  - variables:
+      tmap_response: null
+  - action: rest_command.request_tmap_routes
+    data:
+      startX: 127.001917
+      startY: 37.506326
+      endX: 127.020311
+      endY: 37.502444
+      searchOption: 1
+    response_variable: tmap_response
+  - action: gicisky.write
+    data:
+      payload:
+        - type: text
+          value: "{{ now().strftime('%H시 %M분') }} 출발 기준"
+          font: fonts/GmarketSansTTFBold.ttf
+          anchor: mt
+          x: 125
+          "y": 5
+          size: 21
+        - type: text
+          value: 출근 소요 시간
+          font: fonts/GmarketSansTTFBold.ttf
+          anchor: mt
+          x: 125
+          "y": 35
+          size: 30
+        - type: text
+          value: |
+            {% if tmap_response is defined %}
+              {% set t = tmap_response.content.features[0].properties.totalTime | int(0) %}
+              {{ (t / 60) | round(0) }}
+            {% else %}
+              Error
+            {% endif %}
+          font: fonts/GmarketSansTTFBold.ttf
+          anchor: rb
+          x: 190
+          "y": 110
+          size: 40
+          color: red
+        - type: text
+          value: 분
+          font: fonts/GmarketSansTTFBold.ttf
+          anchor: rb
+          x: 215
+          "y": 100
+          size: 20
+        - type: icon
+          value: car-lifted-pickup
+          anchor: lb
+          x: 40
+          "y": 110
+          size: 40
+        - type: icon
+          value: timer-marker-outline
+          anchor: lb
+          x: 85
+          "y": 110
+          size: 40
+    target:
+      device_id: bf1eead6141be50e7ac6e50369ca06fc
+mode: single

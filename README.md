@@ -44,6 +44,32 @@ repository into the `custom_components/gicisky` directory.
 ### [2.1" Wifi](https://github.com/eigger/hass-gicisky/blob/master/examples/2.1-wifi.yaml)
 <img src=https://github.com/eigger/hass-gicisky/blob/master/examples/2.1-wifi.jpg>
 
+### [2.1" TMap time](https://github.com/eigger/hass-gicisky/blob/master/examples/2.1-tmap-time.yaml)
+<img src=https://github.com/eigger/hass-gicisky/blob/master/examples/2.1-tmap-time.jpg>
+
+```
+#https://openapi.sk.com/products/detail?linkMenuSeq=46
+rest_command:
+  request_tmap_routes:
+    url: https://apis.openapi.sk.com/tmap/routes?version=1
+    method: POST
+    headers:
+      appKey: !secret tmap_api_key
+      accept: "application/json, text/html"
+    content_type: "application/json; charset=utf-8"
+    payload: >-
+      {
+        "startX": {{ startX }},
+        "startY": {{ startY }},
+        "endX": {{ endX }},
+        "endY": {{ endY }},
+        "searchOption": {{ searchOption }},
+        "totalValue": 2,
+        "trafficInfo ": "Y",
+        "mainRoadInfo": "Y",
+      }
+```
+
 ### [4.2" Image](https://github.com/eigger/hass-gicisky/blob/master/examples/4.2-image.yaml)
 <img src=https://github.com/eigger/hass-gicisky/blob/master/examples/4.2-image.jpg>
 

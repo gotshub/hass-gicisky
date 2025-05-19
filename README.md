@@ -89,6 +89,9 @@ data:
 target:
   device_id: <your device>
 ```
+## Third-Party Custom Components
+- [Naver Weather(minumida)](https://github.com/miumida/naver_weather.git)
+  
 ## References
 - [OpenEPaperLink](https://github.com/OpenEPaperLink/Home_Assistant_Integration.git)
 - [bthome](https://github.com/home-assistant/core/tree/dev/homeassistant/components/bthome)

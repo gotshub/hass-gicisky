@@ -12,6 +12,7 @@ Gicisky BLE Label Home Assistant Integration
 - EPD 2.1" BWR
 - EPD 2.9" BWR
 - EPD 4.2" BWR
+- EPD 7.5" BWR
 
 ## Installation
 1. Install this integration with HACS (adding repository required), or copy the contents of this

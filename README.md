@@ -73,7 +73,7 @@ data:
       y: 12
       size: 12
     - type: dlimg
-      url: "https://image url.png"
+      url: "https://image url.png" or "/config/www/images/image.png"
       x: 10
       y: 10
       xsize: 12

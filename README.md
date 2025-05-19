@@ -18,8 +18,6 @@ Gicisky BLE Label Home Assistant Integration
 1. Install this integration with HACS (adding repository required), or copy the contents of this
 repository into the `custom_components/gicisky` directory.
 2. Restart Home Assistant.
-3. Go to Settings / Integrations and add integration "Gicisky"
-4. Please select a discovered Gicisky device from the list.
 
 ## ⚠️ Important Notice
 - It is **strongly recommended to use a Bluetooth proxy instead of a built-in Bluetooth adapter**.  

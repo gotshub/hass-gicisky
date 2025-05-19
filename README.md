@@ -23,7 +23,7 @@ repository into the `custom_components/gicisky` directory.
 
 ## ⚠️ Important Notice
 - It is **strongly recommended to use a Bluetooth proxy instead of a built-in Bluetooth adapter**.  
-  Bluetooth proxies generally offer better range and reliability, especially in environments with multiple BLE devices.
+  Bluetooth proxies generally offer more stable connections and better range, especially in environments with multiple BLE devices.
 - When using a Bluetooth proxy, it is strongly recommended to **keep the scan interval at its default value**.  
   Changing these values may cause issues with Bluetooth data transmission.
   

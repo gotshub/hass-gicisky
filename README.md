@@ -116,9 +116,10 @@ target:
   device_id: <your device>
 ```
 ## Third-Party Custom Components
-- [Naver Weather(minumida)](https://github.com/miumida/naver_weather.git)
+- [Naver Weather (minumida)](https://github.com/miumida/naver_weather.git)
   
 ## References
+- [ATC GICISKY ESL (atc1441)](https://github.com/atc1441/ATC_GICISKY_ESL.git)
 - [OpenEPaperLink](https://github.com/OpenEPaperLink/Home_Assistant_Integration.git)
 - [bthome](https://github.com/home-assistant/core/tree/dev/homeassistant/components/bthome)
 - [bthome-ble](https://github.com/Bluetooth-Devices/bthome-ble.git)

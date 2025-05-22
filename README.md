@@ -33,6 +33,8 @@ repository into the `custom_components/gicisky` directory.
       #interval: 1100ms
       #window: 1100ms
       active: true
+  bluetooth_proxy:
+    active: true
    
 ## Examples
 ### [2.1" Date](https://github.com/eigger/hass-gicisky/blob/master/examples/2.1-date.yaml)

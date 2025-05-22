@@ -4,7 +4,7 @@
   "bluetooth": [
     {
       "manufacturer_id": 20563,
-      "connectable": true
+      "connectable": false
     }
   ],
   "codeowners": ["@eigger"],
@@ -13,7 +13,7 @@
   "documentation": "https://github.com/eigger/hass-gicisky",
   "issue_tracker": "https://github.com/eigger/hass-gicisky/issues",
   "iot_class": "local_push",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "requirements": [
     "qrcode[pil]",
     "python-barcode"

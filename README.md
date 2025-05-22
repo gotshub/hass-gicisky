@@ -24,6 +24,7 @@ repository into the `custom_components/gicisky` directory.
   Bluetooth proxies generally offer more stable connections and better range, especially in environments with multiple BLE devices.
 - When using a Bluetooth proxy, it is strongly recommended to **keep the scan interval at its default value**.  
   Changing these values may cause issues with Bluetooth data transmission.
+- **bluetooth_proxy:** must always have **active: true**.
   
   Example (recommended configuration with default values):
 
@@ -33,6 +34,7 @@ repository into the `custom_components/gicisky` directory.
       #interval: 1100ms
       #window: 1100ms
       active: true
+  
   bluetooth_proxy:
     active: true
    

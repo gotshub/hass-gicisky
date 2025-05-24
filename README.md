@@ -107,15 +107,12 @@ data:
       y: 10
       xsize: 12
       ysize: 12
-      rotate: 0
     - type: qrcode
       data: "qr data"
       x: 140
       y: 50
       boxsize: 2
       border: 2
-      color: "black"
-      bgcolor: "white"
 target:
   device_id: <your device>
 ```

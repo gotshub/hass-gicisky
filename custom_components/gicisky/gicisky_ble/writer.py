@@ -53,7 +53,7 @@ async def update_image(
             for svc in services if svc.uuid.lower().startswith("0000f")
             for c in svc.characteristics
         ]
-        if len(char_uuids) != 3:
+        if len(char_uuids) < 2:
             raise BleakServiceMissing(f"UUID Len: {len(char_uuids)}")
         gicisky = GiciskyClient(client, char_uuids, device)
         await gicisky.start_notify()

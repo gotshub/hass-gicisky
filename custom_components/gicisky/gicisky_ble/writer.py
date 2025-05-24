@@ -89,7 +89,8 @@ class GiciskyClient:
         self.tft = device.tft
         self.rotation = device.rotation
         self.mirror = device.mirror
-        self.packet_size = (device.width * device.height) // 8 * (2 if device.red else 1)
+        self.compression = device.compression
+        self.packet_size = 0 #(device.width * device.height) // 8 * (2 if device.red else 1)
         self.event: Event = Event()
         self.command_data: bytes | None = None
         self.image_packets: list[int] = []
@@ -145,6 +146,7 @@ class GiciskyClient:
         count = 0
         status = self.Status.START
         self.image_packets = self._make_image_packet(image, threshold, red_threshold)
+        self.packet_size = len(self.image_packets)
         try:
             while True:
                 if status == self.Status.START:
@@ -235,8 +237,12 @@ class GiciskyClient:
                 r, g, b = pixels[px]
 
                 luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
-                if luminance > threshold:
-                    current_byte |= (1 << bit_pos)
+                if self.compression:
+                    if luminance < threshold:
+                        current_byte |= (1 << bit_pos)
+                else:
+                    if luminance > threshold:
+                        current_byte |= (1 << bit_pos)
                 if (r > red_threshold) and (g < red_threshold):
                     current_byte_red |= (1 << bit_pos)
 
@@ -252,8 +258,45 @@ class GiciskyClient:
             byte_data.append(current_byte)
             byte_data_red.append(current_byte_red)
 
+        if self.compression:
+            return self._compress_byte_data(byte_data, byte_data_red)
+        
         combined = byte_data + byte_data_red if self.support_red else byte_data
         return list(bytearray(combined))
+    
+    def _compress_byte_data(self, byte_data, byte_data_red) -> list[int]:
+        byte_per_line = self.height // 8
+        buf = [0x00, 0x00, 0x00, 0x00]
+        pos = 0
+        for _ in range(self.width):
+            buf.extend([
+                0x75,
+                byte_per_line + 7,
+                byte_per_line,
+                0x00, 0x00, 0x00, 0x00
+            ])
+            buf.extend(byte_data[pos:pos + byte_per_line])
+            pos += byte_per_line
+
+        if byte_data_red is not None:
+            pos = 0
+            for _ in range(self.width):
+                buf.extend([
+                    0x75,
+                    byte_per_line + 7,
+                    byte_per_line,
+                    0x00, 0x00, 0x00, 0x00
+                ])
+                buf.extend(byte_data_red[pos:pos + byte_per_line])
+                pos += byte_per_line
+
+        total_len = len(buf)
+        buf[0] =  total_len        & 0xFF
+        buf[1] = (total_len >>  8) & 0xFF
+        buf[2] = (total_len >> 16) & 0xFF
+        buf[3] = (total_len >> 24) & 0xFF
+
+        return list(bytearray(buf))
 
     def _make_cmd_packet(self, cmd: int) -> bytes:
         if cmd == 0x02:

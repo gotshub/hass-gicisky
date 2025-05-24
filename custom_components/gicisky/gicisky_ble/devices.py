@@ -11,6 +11,7 @@ class DeviceEntry:
     tft: bool = False
     mirror: bool = False
     rotation: int = 0
+    compression: bool = False
     manufacturer: str = "Gicisky"
     max_voltage: float = 2.9
     min_voltage: float = 2.2
@@ -39,7 +40,7 @@ DEVICE_TYPES: dict[int, DeviceEntry] = {
         model="EPD 2.9\" BWR",
         width=296,
         height=128,
-        rotation=270,
+        rotation=90,
     ),
     0x4B: DeviceEntry(
         name="EPD 42",
@@ -53,6 +54,7 @@ DEVICE_TYPES: dict[int, DeviceEntry] = {
         model="EPD 7.5\" BWR",
         width=800,
         height=480,
+        compression=True
         max_voltage=3.0
     ),
 }

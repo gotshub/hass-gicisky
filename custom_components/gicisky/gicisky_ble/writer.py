@@ -88,7 +88,8 @@ class GiciskyClient:
         self.support_red = device.red
         self.tft = device.tft
         self.rotation = device.rotation
-        self.mirror = device.mirror
+        self.mirror_x = device.mirror_x
+        self.mirror_y = device.mirror_y
         self.compression = device.compression
         self.packet_size = 0 #(device.width * device.height) // 8 * (2 if device.red else 1)
         self.event: Event = Event()
@@ -231,8 +232,8 @@ class GiciskyClient:
         current_byte_red = 0
         bit_pos = 7
 
-        for y in range(height):
-            for x in range(width - 1, -1, -1) if self.mirror else range(width):
+        for y in range(height - 1, -1, -1) if self.mirror_y else range(height):
+            for x in range(width - 1, -1, -1) if self.mirror_x else range(width):
                 px = (x, y)
                 r, g, b = pixels[px]
 

@@ -9,7 +9,8 @@ class DeviceEntry:
     height: int
     red: bool = True
     tft: bool = False
-    mirror: bool = False
+    mirror_x: bool = False
+    mirror_y: bool = False
     rotation: int = 0
     compression: bool = False
     manufacturer: str = "Gicisky"
@@ -25,7 +26,7 @@ DEVICE_TYPES: dict[int, DeviceEntry] = {
         red=False,
         tft=True,
         rotation=90,
-        mirror=True
+        mirror_x=True
     ),
     0x0B: DeviceEntry(
         name="EPD 21",
@@ -33,7 +34,7 @@ DEVICE_TYPES: dict[int, DeviceEntry] = {
         width=250,
         height=128,
         rotation=270,
-        mirror=True
+        mirror_x=True
     ),
     0x33: DeviceEntry(
         name="EPD 29",
@@ -54,6 +55,7 @@ DEVICE_TYPES: dict[int, DeviceEntry] = {
         model="EPD 7.5\" BWR",
         width=800,
         height=480,
+        mirror_y=True,
         compression=True,
         max_voltage=3.0
     ),

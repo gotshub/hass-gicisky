@@ -73,6 +73,8 @@ rest_command:
         "mainRoadInfo": "Y",
       }
 ```
+### [2.9" Today Calendar](https://github.com/eigger/hass-gicisky/blob/master/examples/2.9-today-calendar.yaml)
+<img src=https://github.com/eigger/hass-gicisky/blob/master/examples/2.9-today-calendar.jpg>
 
 ### [4.2" Image](https://github.com/eigger/hass-gicisky/blob/master/examples/4.2-image.yaml)
 <img src=https://github.com/eigger/hass-gicisky/blob/master/examples/4.2-image.jpg>

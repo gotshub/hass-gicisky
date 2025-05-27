@@ -88,6 +88,9 @@ Remote Calendar -> Add *.ics
 ### [4.2" Naver Weather](https://github.com/eigger/hass-gicisky/blob/master/examples/4.2-naver-weather.yaml)
 <img src=https://github.com/eigger/hass-gicisky/blob/master/examples/4.2-naver-weather.jpg>
 
+### [7.5" Image](https://github.com/eigger/hass-gicisky/blob/master/examples/7.5-image.yaml)
+<img src=https://github.com/eigger/hass-gicisky/blob/master/examples/7.5-image.jpg>
+
 ```
 action: gicisky.write
 data:

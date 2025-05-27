@@ -10,8 +10,8 @@ actions:
           url: /config/www/images/image.png
           x: 0
           "y": 0
-          xsize: 400
-          ysize: 300
+          xsize: 800
+          ysize: 480
     target:
       device_id: dfce78828e18592acb89c4282eacfd70
 mode: single

@@ -73,8 +73,8 @@ rest_command:
         "mainRoadInfo": "Y",
       }
 ```
-### [2.9" Today Calendar](https://github.com/eigger/hass-gicisky/blob/master/examples/2.9-today-calendar.yaml)
-<img src=https://github.com/eigger/hass-gicisky/blob/master/examples/2.9-today-calendar.jpg>
+### [2.9" Google Calendar](https://github.com/eigger/hass-gicisky/blob/master/examples/2.9-google-calendar.yaml)
+<img src=https://github.com/eigger/hass-gicisky/blob/master/examples/2.9-google-calendar.jpg>
 
 ```
 Remote Calendar -> Add *.ics
@@ -90,6 +90,9 @@ Remote Calendar -> Add *.ics
 
 ### [7.5" Image](https://github.com/eigger/hass-gicisky/blob/master/examples/7.5-image.yaml)
 <img src=https://github.com/eigger/hass-gicisky/blob/master/examples/7.5-image.jpg>
+
+### [7.5" Google Calendar](https://github.com/eigger/hass-gicisky/blob/master/examples/7.5-google-calendar.yaml)
+<img src=https://github.com/eigger/hass-gicisky/blob/master/examples/7.5-google-calendar.jpg>
 
 ```
 action: gicisky.write

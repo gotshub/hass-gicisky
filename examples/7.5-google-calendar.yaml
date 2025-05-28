@@ -1,4 +1,4 @@
-alias: 캘린터 라벨
+alias: 캘린더 라벨 7.5
 description: ""
 triggers:
   - trigger: time
@@ -11,77 +11,308 @@ actions:
     metadata: {}
     data:
       duration:
-        hours: 72
+        hours: 164
         minutes: 0
         seconds: 0
     response_variable: response
     target:
-      entity_id: calendar.google
+      entity_id:
+        - calendar.google
+        - calendar.holidays
   - variables:
-      today_event: |
-        {% set today = now().date() %}
-        {% set events = response['calendar.google'].events %}
-        {% set ns = namespace(event='') %}
-        {% for ev in events %}
-          {% set start = as_datetime(ev.start).date() %}
-          {% set end = as_datetime(ev.end).date() %}
-          {% if start <= today <= end %}
-            {% set ns.event = ev %}
+      duration_day: 7
+      holiday: calendar.holidays
+      data_allday: |
+        {% set day_map = {
+          'Monday':'월요일','Tuesday':'화요일','Wednesday':'수요일',
+          'Thursday':'목요일','Friday':'금요일',
+          'Saturday':'토요일','Sunday':'일요일'
+        } %}
+        {% set events = merge_response(response) | sort(attribute='start') %}
+        {% set ns = namespace(by_day={}) %}
+        {% for i in range(duration_day) %}
+          {% set date = (now() + timedelta(days=i)).date() %}
+          {% set match = namespace(event='') %}
+          {% for ev in events %}
+            {% set s = as_datetime(ev.start).date() %}
+            {% set e = as_datetime(ev.end).date() %}
+            {% if ('T' in ev.start and s <= date <= e) or (s < e and s <= date < e) %}
+              {% set match.event = ev %}
+              {% break %}
+            {% endif %}
+          {% endfor %}
+          {% set details = {'date': date.strftime('%Y-%m-%d'), 'day': day_map[date.strftime('%A')]} %}
+          {% if match.event and match.event.summary %}
+            {% set details = details | combine({
+              'start':   match.event.start,
+              'end':     match.event.end,
+              'summary': match.event.summary,
+              'entity_id': match.event.entity_id
+            }) %}
           {% endif %}
+          {% set details = details | combine({
+            'holiday': date.strftime('%A') == 'Saturday' or date.strftime('%A') == 'Sunday' or details.entity_id == holiday
+          }) %}      
+          {% set ns.by_day = ns.by_day | combine({ date|string: details }) %}
         {% endfor %}
-        {{ ns.event }}
+        {{ ns.by_day }}
+      today: "{{ data_allday[now().strftime('%Y-%m-%d')] | default({}) }}"
+      day_after_1: >-
+        {{ data_allday[(now() + timedelta(days=1)).strftime('%Y-%m-%d')] |
+        default({}) }}
+      day_after_2: >-
+        {{ data_allday[(now() + timedelta(days=2)).strftime('%Y-%m-%d')] |
+        default({}) }}
+      day_after_3: >-
+        {{ data_allday[(now() + timedelta(days=3)).strftime('%Y-%m-%d')] |
+        default({}) }}
+      day_after_4: >-
+        {{ data_allday[(now() + timedelta(days=4)).strftime('%Y-%m-%d')] |
+        default({}) }}
+      day_after_5: >-
+        {{ data_allday[(now() + timedelta(days=5)).strftime('%Y-%m-%d')] |
+        default({}) }}
+      day_after_6: >-
+        {{ data_allday[(now() + timedelta(days=6)).strftime('%Y-%m-%d')] |
+        default({}) }}
   - action: gicisky.write
     data:
       payload:
         - type: text
-          value: "{{ now().strftime('%m월 %d일') }}"
+          value: "{{ as_datetime(today.date).strftime('%m월') }}"
           font: fonts/GmarketSansTTFBold.ttf
           anchor: rt
-          x: 175
-          "y": 5
-          size: 35
+          x: 780
+          "y": 30
+          size: 50
           color: black
         - type: text
-          value: |
-            {% set day_map = {
-                'Monday': '월요일',
-                'Tuesday': '화요일',
-                'Wednesday': '수요일',
-                'Thursday': '목요일',
-                'Friday': '금요일',
-                'Saturday': '토요일',
-                'Sunday': '일요일'
-            } %} {{ day_map[now().strftime('%A')] }}
+          value: "{{ as_datetime(today.date).strftime('%d') }}"
+          font: fonts/GmarketSansTTFBold.ttf
+          anchor: mt
+          x: 130
+          "y": 40
+          size: 100
+          color: "{{ 'red' if today.holiday else 'black' }}"
+        - type: text
+          value: "{{ today.day }}"
+          font: fonts/GmarketSansTTFBold.ttf
+          anchor: mt
+          x: 130
+          "y": 140
+          size: 40
+          color: "{{ 'red' if today.holiday else 'black' }}"
+        - type: text
+          value: 오늘 일정
           font: fonts/GmarketSansTTFBold.ttf
           anchor: lt
-          x: 190
-          "y": 5
-          size: 35
-          color: |
-            {% set date = now().strftime('%A') %}
-            {{ 'red' if date == 'Saturday' or date == 'Sunday' else 'black' }}
+          x: 300
+          "y": 30
+          size: 40
         - type: text
           value: |
-            {% if today_event %}
-              {{ today_event.summary }}
+            {% if today.summary %}
+              {% if today.start and 'T' in today.start %}
+                {{ as_datetime(today.start).strftime('%H:%M') }} {{ today.summary }}
+              {% else %}
+                {{ today.summary }}
+              {% endif %}
             {% else %}
               일정 없음
             {% endif %}
           font: fonts/GmarketSansTTFBold.ttf
-          anchor: mb
-          x: 148
-          "y": 90
+          anchor: lt
+          x: 300
+          "y": 80
           size: 40
+        - type: line
+          x_start: 10
+          x_end: 790
+          y_start: 200
+          y_end: 200
+          width: 3
+          fill: black
         - type: text
           value: |
-            {% if today_event %}
-              {{ as_datetime(today_event.start).strftime('%H:%M') }}
+            {% set day = as_datetime(day_after_1.date).strftime('%d') %}
+            {% if day == '01' %}
+              {{ as_datetime(day_after_1.date).strftime('%m-%d') }}({{ day_after_1.day[0] }})
+            {% else %}
+              {{ as_datetime(day_after_1.date).strftime('%d') }}({{ day_after_1.day[0] }})
             {% endif %}
           font: fonts/GmarketSansTTFBold.ttf
-          anchor: mb
-          x: 148
-          "y": 120
-          size: 20
+          anchor: rt
+          x: 160
+          "y": 215
+          size: 30
+          color: "{{ 'red' if day_after_1.holiday else 'black' }}"
+        - type: text
+          value: |
+            {% if day_after_1.summary %}
+              {% if day_after_1.start and 'T' in day_after_1.start %}
+                {{ as_datetime(day_after_1.start).strftime('%H:%M') }} {{ day_after_1.summary }}
+              {% else %}
+                {{ day_after_1.summary }}
+              {% endif %}
+            {% else %}
+              일정 없음
+            {% endif %}
+          font: fonts/GmarketSansTTFBold.ttf
+          anchor: lt
+          x: 170
+          "y": 215
+          size: 30
+        - type: text
+          value: |
+            {% set day = as_datetime(day_after_2.date).strftime('%d') %}
+            {% if day == '01' %}
+              {{ as_datetime(day_after_2.date).strftime('%m-%d') }}({{ day_after_2.day[0] }})
+            {% else %}
+              {{ as_datetime(day_after_2.date).strftime('%d') }}({{ day_after_2.day[0] }})
+            {% endif %}
+          font: fonts/GmarketSansTTFBold.ttf
+          anchor: rt
+          x: 160
+          "y": 260
+          size: 30
+          color: "{{ 'red' if day_after_2.holiday else 'black' }}"
+        - type: text
+          value: |
+            {% if day_after_2.summary %}
+              {% if day_after_2.start and 'T' in day_after_2.start %}
+                {{ as_datetime(day_after_2.start).strftime('%H:%M') }} {{ day_after_2.summary }}
+              {% else %}
+                {{ day_after_2.summary }}
+              {% endif %}
+            {% else %}
+              일정 없음
+            {% endif %}
+          font: fonts/GmarketSansTTFBold.ttf
+          anchor: lt
+          x: 170
+          "y": 260
+          size: 30
+        - type: text
+          value: |
+            {% set day = as_datetime(day_after_3.date).strftime('%d') %}
+            {% if day == '01' %}
+              {{ as_datetime(day_after_3.date).strftime('%m-%d') }}({{ day_after_3.day[0] }})
+            {% else %}
+              {{ as_datetime(day_after_3.date).strftime('%d') }}({{ day_after_3.day[0] }})
+            {% endif %}
+          font: fonts/GmarketSansTTFBold.ttf
+          anchor: rt
+          x: 160
+          "y": 305
+          size: 30
+          color: "{{ 'red' if day_after_3.holiday else 'black' }}"
+        - type: text
+          value: |
+            {% if day_after_3.summary %}
+              {% if day_after_3.start and 'T' in day_after_3.start %}
+                {{ as_datetime(day_after_3.start).strftime('%H:%M') }} {{ day_after_3.summary }}
+              {% else %}
+                {{ day_after_3.summary }}
+              {% endif %}
+            {% else %}
+              일정 없음
+            {% endif %}
+          font: fonts/GmarketSansTTFBold.ttf
+          anchor: lt
+          x: 170
+          "y": 305
+          size: 30
+        - type: text
+          value: |
+            {% set day = as_datetime(day_after_4.date).strftime('%d') %}
+            {% if day == '01' %}
+              {{ as_datetime(day_after_4.date).strftime('%m-%d') }}({{ day_after_4.day[0] }})
+            {% else %}
+              {{ as_datetime(day_after_4.date).strftime('%d') }}({{ day_after_4.day[0] }})
+            {% endif %}
+          font: fonts/GmarketSansTTFBold.ttf
+          anchor: rt
+          x: 160
+          "y": 350
+          size: 30
+          color: "{{ 'red' if day_after_4.holiday else 'black' }}"
+        - type: text
+          value: |
+            {% if day_after_4.summary %}
+              {% if day_after_4.start and 'T' in day_after_4.start %}
+                {{ as_datetime(day_after_4.start).strftime('%H:%M') }} {{ day_after_4.summary }}
+              {% else %}
+                {{ day_after_4.summary }}
+              {% endif %}
+            {% else %}
+              일정 없음
+            {% endif %}
+          font: fonts/GmarketSansTTFBold.ttf
+          anchor: lt
+          x: 170
+          "y": 350
+          size: 30
+        - type: text
+          value: |
+            {% set day = as_datetime(day_after_5.date).strftime('%d') %}
+            {% if day == '01' %}
+              {{ as_datetime(day_after_5.date).strftime('%m-%d') }}({{ day_after_5.day[0] }})
+            {% else %}
+              {{ as_datetime(day_after_5.date).strftime('%d') }}({{ day_after_5.day[0] }})
+            {% endif %}
+          font: fonts/GmarketSansTTFBold.ttf
+          anchor: rt
+          x: 160
+          "y": 395
+          size: 30
+          color: "{{ 'red' if day_after_5.holiday else 'black' }}"
+        - type: text
+          value: |
+            {% if day_after_5.summary %}
+              {% if day_after_5.start and 'T' in day_after_5.start %}
+                {{ as_datetime(day_after_5.start).strftime('%H:%M') }} {{ day_after_5.summary }}
+              {% else %}
+                {{ day_after_5.summary }}
+              {% endif %}
+            {% else %}
+              일정 없음
+            {% endif %}
+          font: fonts/GmarketSansTTFBold.ttf
+          anchor: lt
+          x: 170
+          "y": 395
+          size: 30
+        - type: text
+          value: |
+            {% set day = as_datetime(day_after_6.date).strftime('%d') %}
+            {% if day == '01' %}
+              {{ as_datetime(day_after_6.date).strftime('%m-%d') }}({{ day_after_6.day[0] }})
+            {% else %}
+              {{ as_datetime(day_after_6.date).strftime('%d') }}({{ day_after_6.day[0] }})
+            {% endif %}
+          font: fonts/GmarketSansTTFBold.ttf
+          anchor: rt
+          x: 160
+          "y": 440
+          size: 30
+          color: "{{ 'red' if day_after_6.holiday else 'black' }}"
+        - type: text
+          value: |
+            {% if day_after_6.summary %}
+              {% if day_after_6.start and 'T' in day_after_6.start %}
+                {{ as_datetime(day_after_6.start).strftime('%H:%M') }} {{ day_after_6.summary }}
+              {% else %}
+                {{ day_after_6.summary }}
+              {% endif %}
+            {% else %}
+              일정 없음
+            {% endif %}
+          font: fonts/GmarketSansTTFBold.ttf
+          anchor: lt
+          x: 170
+          "y": 440
+          size: 30
+    enabled: true
     target:
-      device_id: 0f57b91cca28410f0648a34076ba3507
+      device_id: 2766ccde02539d2b8cfe034556aa95ae
 mode: single

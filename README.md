@@ -85,6 +85,24 @@ data:
 target:
   device_id: <your device>
 ```
+## Internal Font List
+  - fonts/CookieRunBlack.ttf
+  - fonts/CookieRunBold.ttf
+  - fonts/CookieRunRegular.ttf
+  - fonts/GmarketSansTTFBold.ttf
+  - fonts/GmarketSansTTFLight.ttf
+  - fonts/GmarketSansTTFMedium.ttf
+  - fonts/NotoSansKR-Black.ttf
+  - fonts/NotoSansKR-Bold.ttf
+  - fonts/NotoSansKR-ExtraBold.ttf
+  - fonts/NotoSansKR-ExtraLight.ttf
+  - fonts/NotoSansKR-Light.ttf
+  - fonts/NotoSansKR-Medium.ttf
+  - fonts/NotoSansKR-Regular.ttf
+  - fonts/NotoSansKR-SemiBold.ttf
+  - fonts/NotoSansKR-Thin.ttf
+  - fonts/OwnglyphParkDaHyun.ttf
+
 ## [Gicisky Image Edit & Uploader](https://eigger.github.io/Gicisky_Image_Uploader.html)
 
 ## T-Map

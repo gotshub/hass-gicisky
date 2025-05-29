@@ -49,7 +49,6 @@ repository into the `custom_components/gicisky` directory.
 | 2.9" (296x128) | Google Calendar | ![2.9-google-calendar.jpg](./examples/2.9-google-calendar.jpg) | [2.9" Google Calendar](./examples/2.9-google-calendar.yaml) |
 | 4.2" (400x300) | Image | ![4.2-image.jpg](./examples/4.2-image.jpg) | [4.2" Image](./examples/4.2-image.yaml) |
 | 4.2" (400x300) | Naver Weather | ![4.2-naver-weather.jpg](./examples/4.2-naver-weather.jpg) | [4.2" Naver Weather](./examples/4.2-naver-weather.yaml) |
-| 7.5" (800x480) | Image | ![7.5-image.jpg](./examples/7.5-image.jpg) | [7.5" Image](./examples/7.5-image.yaml) |
 | 7.5" (800x480) | Google Calendar | ![7.5-google-calendar.jpg](./examples/7.5-google-calendar.jpg) | [7.5" Google Calendar](./examples/7.5-google-calendar.yaml) |
 ```
 action: gicisky.write

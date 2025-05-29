@@ -111,7 +111,7 @@ actions:
           size: 40
         - type: text
           value: |
-            {% if today.summary %}
+            {% if 'summary' in today %}
               {% if today.start and 'T' in today.start %}
                 {{ as_datetime(today.start).strftime('%H:%M') }} {{ today.summary }}
               {% else %}
@@ -148,7 +148,7 @@ actions:
           color: "{{ 'red' if day_after_1.holiday else 'black' }}"
         - type: text
           value: |
-            {% if day_after_1.summary %}
+            {% if 'summary' in day_after_1 %}
               {% if day_after_1.start and 'T' in day_after_1.start %}
                 {{ as_datetime(day_after_1.start).strftime('%H:%M') }} {{ day_after_1.summary }}
               {% else %}
@@ -178,7 +178,7 @@ actions:
           color: "{{ 'red' if day_after_2.holiday else 'black' }}"
         - type: text
           value: |
-            {% if day_after_2.summary %}
+            {% if 'summary' in day_after_2 %}
               {% if day_after_2.start and 'T' in day_after_2.start %}
                 {{ as_datetime(day_after_2.start).strftime('%H:%M') }} {{ day_after_2.summary }}
               {% else %}
@@ -208,7 +208,7 @@ actions:
           color: "{{ 'red' if day_after_3.holiday else 'black' }}"
         - type: text
           value: |
-            {% if day_after_3.summary %}
+            {% if 'summary' in day_after_3 %}
               {% if day_after_3.start and 'T' in day_after_3.start %}
                 {{ as_datetime(day_after_3.start).strftime('%H:%M') }} {{ day_after_3.summary }}
               {% else %}
@@ -238,7 +238,7 @@ actions:
           color: "{{ 'red' if day_after_4.holiday else 'black' }}"
         - type: text
           value: |
-            {% if day_after_4.summary %}
+            {% if 'summary' in day_after_4 %}
               {% if day_after_4.start and 'T' in day_after_4.start %}
                 {{ as_datetime(day_after_4.start).strftime('%H:%M') }} {{ day_after_4.summary }}
               {% else %}
@@ -268,7 +268,7 @@ actions:
           color: "{{ 'red' if day_after_5.holiday else 'black' }}"
         - type: text
           value: |
-            {% if day_after_5.summary %}
+            {% if 'summary' in day_after_5 %}
               {% if day_after_5.start and 'T' in day_after_5.start %}
                 {{ as_datetime(day_after_5.start).strftime('%H:%M') }} {{ day_after_5.summary }}
               {% else %}
@@ -298,7 +298,7 @@ actions:
           color: "{{ 'red' if day_after_6.holiday else 'black' }}"
         - type: text
           value: |
-            {% if day_after_6.summary %}
+            {% if 'summary' in day_after_6 %}
               {% if day_after_6.start and 'T' in day_after_6.start %}
                 {{ as_datetime(day_after_6.start).strftime('%H:%M') }} {{ day_after_6.summary }}
               {% else %}

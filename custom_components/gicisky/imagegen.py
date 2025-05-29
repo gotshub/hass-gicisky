@@ -95,17 +95,11 @@ def customimage(entity_id, device, service, hass):
     background = getIndexColor(service.data.get("background","white"))
     canvas_width = device.width
     canvas_height = device.height
-    img = Image.new('RGBA', (canvas_width, canvas_height), color=background)
-    # if rotate == 0:
-    #     img = Image.new('RGBA', (canvas_width, canvas_height), color=background)
-    # elif rotate == 90:
-    #     img = Image.new('RGBA', (canvas_height, canvas_width), color=background)
-    # elif rotate == 180:
-    #     img = Image.new('RGBA', (canvas_width, canvas_height), color=background)
-    # elif rotate == 270:
-    #     img = Image.new('RGBA', (canvas_height, canvas_width), color=background)
-    # else:
-    #     img = Image.new('RGBA', (canvas_width, canvas_height), color=background)
+    if rotate == 90 or rotate == 270:
+        img = Image.new('RGBA', (canvas_height, canvas_width), color=background)
+    else:
+        img = Image.new('RGBA', (canvas_width, canvas_height), color=background)
+    
     pos_y = 0
     for element in payload:
         _LOGGER.debug("type: " + element["type"])
@@ -616,7 +610,7 @@ def customimage(entity_id, device, service, hass):
                 img_draw.text((text_x, text_y), percentage_text, font=font, fill=text_color, anchor='lt') # TODO anchor is still off
 
     #post processing
-    if rotate != 0:
+    if rotate == 90 or rotate == 180 or rotate == 270:
         img = img.rotate(-rotate, expand=True)
     rgb_image = img.convert('RGB')
     patha = os.path.join(os.path.dirname(__file__), entity_id + '.jpg')

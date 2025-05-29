@@ -42,15 +42,15 @@ repository into the `custom_components/gicisky` directory.
 ## Examples
 | Size | Example | Preview | Yaml |
 |------|---------|---------|------|
-| 2.1" | Date | ![2.1-date.jpg](./examples/2.1-date.jpg) | [2.1" Date](https://github.com/eigger/hass-gicisky/blob/master/examples/2.1-date.yaml) |
-| 2.1" | Naver Weather | ![2.1-naver-weather.jpg](./examples/2.1-naver-weather.jpg) | [2.1" Naver Weather](https://github.com/eigger/hass-gicisky/blob/master/examples/2.1-naver-weather.yaml) |
-| 2.1" | Wifi | ![2.1-wifi.jpg](./examples/2.1-wifi.jpg) | [2.1" Wifi](https://github.com/eigger/hass-gicisky/blob/master/examples/2.1-wifi.yaml) |
-| 2.1" | TMap time | ![2.1-tmap-time.jpg](./examples/2.1-tmap-time.jpg) | [2.1" TMap time](https://github.com/eigger/hass-gicisky/blob/master/examples/2.1-tmap-time.yaml) |
-| 2.9" | Google Calendar | ![2.9-google-calendar.jpg](./examples/2.9-google-calendar.jpg) | [2.9" Google Calendar](https://github.com/eigger/hass-gicisky/blob/master/examples/2.9-google-calendar.yaml) |
-| 4.2" | Image | ![4.2-image.jpg](./examples/4.2-image.jpg) | [4.2" Image](https://github.com/eigger/hass-gicisky/blob/master/examples/4.2-image.yaml) |
-| 4.2" | Naver Weather | ![4.2-naver-weather.jpg](./examples/4.2-naver-weather.jpg) | [4.2" Naver Weather](https://github.com/eigger/hass-gicisky/blob/master/examples/4.2-naver-weather.yaml) |
-| 7.5" | Image | ![7.5-image.jpg](./examples/7.5-image.jpg) | [7.5" Image](https://github.com/eigger/hass-gicisky/blob/master/examples/7.5-image.yaml) |
-| 7.5" | Google Calendar | ![7.5-google-calendar.jpg](./examples/7.5-google-calendar.jpg) | [7.5" Google Calendar](https://github.com/eigger/hass-gicisky/blob/master/examples/7.5-google-calendar.yaml) |
+| 2.1" | Date | ![2.1-date.jpg](./examples/2.1-date.jpg) | [2.1" Date](./examples/2.1-date.yaml) |
+| 2.1" | Naver Weather | ![2.1-naver-weather.jpg](./examples/2.1-naver-weather.jpg) | [2.1" Naver Weather](./examples/2.1-naver-weather.yaml) |
+| 2.1" | Wifi | ![2.1-wifi.jpg](./examples/2.1-wifi.jpg) | [2.1" Wifi](./examples/2.1-wifi.yaml) |
+| 2.1" | TMap time | ![2.1-tmap-time.jpg](./examples/2.1-tmap-time.jpg) | [2.1" TMap time](./examples/2.1-tmap-time.yaml) |
+| 2.9" | Google Calendar | ![2.9-google-calendar.jpg](./examples/2.9-google-calendar.jpg) | [2.9" Google Calendar](./examples/2.9-google-calendar.yaml) |
+| 4.2" | Image | ![4.2-image.jpg](./examples/4.2-image.jpg) | [4.2" Image](./examples/4.2-image.yaml) |
+| 4.2" | Naver Weather | ![4.2-naver-weather.jpg](./examples/4.2-naver-weather.jpg) | [4.2" Naver Weather](./examples/4.2-naver-weather.yaml) |
+| 7.5" | Image | ![7.5-image.jpg](./examples/7.5-image.jpg) | [7.5" Image](./examples/7.5-image.yaml) |
+| 7.5" | Google Calendar | ![7.5-google-calendar.jpg](./examples/7.5-google-calendar.jpg) | [7.5" Google Calendar](./examples/7.5-google-calendar.yaml) |
 ```
 action: gicisky.write
 data:

@@ -25,17 +25,19 @@ write:
         object:
     rotate:
       name: Rotate
-      description: Label Rotation (0, 90, 180, 270)
+      description: "Label Rotation (0, 90, 180, 270), default: 0"
       required: false
       example: '0'
       selector:
-        number:
-          min: 0
-          max: 270
-          step: 90
+        select:
+          options:
+            - 0
+            - 90
+            - 180
+            - 270
     background:
       name: Background
-      description: Background Color (white, black, red)
+      description: "Background Color (white, black, red), default: white"
       required: false
       example: white
       selector:
@@ -46,7 +48,7 @@ write:
             - "red"
     threshold:
       name: Black Threshold
-      description: Black binary threshold (0 ~ 255)
+      description: "Black binary threshold (0 ~ 255), default: 128"
       required: false
       example: 128
       selector:
@@ -56,7 +58,7 @@ write:
           step: 1
     red_threshold:
       name: Red Threshold
-      description: Red binary threshold (0 ~ 255)
+      description: "Red binary threshold (0 ~ 255), default: 128"
       required: false
       example: 128
       selector:

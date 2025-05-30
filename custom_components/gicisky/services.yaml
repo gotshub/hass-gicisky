@@ -7,26 +7,64 @@ write:
   fields:
     payload:
       name: Payload
-      description: payload to draw
+      description: Paylod to draw
       required: true
-      example: examples
+      example: |
+        - type: text
+          value: Hello World!
+          x: 10
+          y: 10
+          size: 40
+      default: |
+        - type: text
+          value: Hello World!
+          x: 10
+          y: 10
+          size: 40
+      selector:
+        object:
     rotate:
-      name: rotate
-      description: 0, 90, 180, 270
+      name: Rotate
+      description: Label Rotation (0, 90, 180, 270)
       required: false
-      example: 0
+      example: '0'
+      default: '0'
+      selector:
+        number:
+          min: 0
+          max: 270
+          step: 90
     background:
-      name: background
-      description: white, black, red
+      name: Background
+      description: Background Color (white, black, red)
       required: false
       example: white
+      default: white
+      selector:
+        select:
+          options:
+            - "white"
+            - "black"
+            - "red"
     threshold:
-      name: threshold
-      description: 0 ~ 255
+      name: Black Threshold
+      description: Black binary threshold (0 ~ 255)
       required: false
       example: 128
+      default: 128
+      selector:
+        number:
+          min: 0
+          max: 255
+          step: 1
     red_threshold:
-      name: red_threshold
-      description: 0 ~ 255
+      name: Red Threshold
+      description: Red binary threshold (0 ~ 255)
       required: false
       example: 128
+      default: 128
+      selector:
+        number:
+          min: 0
+          max: 255
+          step: 1

@@ -10,11 +10,16 @@ write:
       description: payload to draw
       required: true
       example: examples
-    # rotate:
-    #   name: rotate
-    #   description: 0, 90, 180, 270
-    #   required: false
-    #   example: 0
+    rotate:
+      name: rotate
+      description: 0, 90, 180, 270
+      required: false
+      example: 0
+    background:
+      name: background
+      description: white, black, red
+      required: false
+      example: white
     threshold:
       name: threshold
       description: 0 ~ 255

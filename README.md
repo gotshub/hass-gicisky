@@ -54,6 +54,8 @@ repository into the `custom_components/gicisky` directory.
 ```
 action: gicisky.write
 data:
+  rotate: 0 or 90 or 180 or 270
+  background: white or black or red
   payload:
     - type: text
       value: Hello World!

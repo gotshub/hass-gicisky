@@ -108,7 +108,7 @@ class GiciskyBluetoothDeviceData(BluetoothData):
     
     async def async_poll(self) -> SensorUpdate:
         self._events_updates.clear()
-        if not self.last_updated:
+        if self.last_updated:
             self.update_predefined_sensor(
                 SensorLibrary.TIMESTAMP__NONE, self.last_updated, None, "Last Update Time"
             )

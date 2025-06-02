@@ -15,7 +15,7 @@ write:
           x: 10
           y: 10
           size: 40
-      default: |
+      default:
         - type: text
           value: Hello World!
           x: 10

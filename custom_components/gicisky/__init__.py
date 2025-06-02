@@ -18,6 +18,7 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceRegistry
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util.signal_type import SignalType
 from homeassistant.exceptions import HomeAssistantError
 
@@ -89,7 +90,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
         connectable=True,
         entry=entry,
     )
+
+    async def _async_poll_data() -> SensorUpdate:
+        try:
+            device = async_ble_device_from_address(hass, address)
+            if not device:
+                raise UpdateFailed("BLE Device none")
+            sensor = await data.async_poll(device)
+            return sensor
+        except Exception as err:
+            raise UpdateFailed(f"polling error: {err}") from err
+
+    poll_coordinator = DataUpdateCoordinator[SensorUpdate](
+        hass,
+        _LOGGER,
+        name=DOMAIN,
+        update_method=_async_poll_data,
+        update_interval=timedelta(hours=24),
+    )
+
     entry.runtime_data = coordinator
+    entry.runtime_data.poll_coordinator = poll_coordinator
+    await poll_coordinator.async_config_entry_first_refresh()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
 
@@ -113,17 +135,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
                 image = await hass.async_add_executor_job(customimage, entry_id, data.device, service, hass)
 
                 max_retries = 3
+                await data.set_connected(True)
+                await poll_coordinator.async_refresh()
                 for attempt in range(1, max_retries + 1):
                     success = await update_image(ble_device, data.device, image, threshold, red_threshold)
                     if success:
+                        await data.last_update()
                         break
 
                     _LOGGER.warning("Write failed to %s (attempt %d/%d)", address, attempt, max_retries)
                     if attempt < max_retries:
                         await sleep(1)
-
-                else:
-                    raise HomeAssistantError(f"Failed to write to {address} after {max_retries} attempts")    
+                    else:
+                        await data.set_connected(False)
+                        await poll_coordinator.async_refresh()
+                        raise HomeAssistantError(f"Failed to write to {address} after {max_retries} attempts")
+                await data.set_connected(False)
+                await poll_coordinator.async_refresh()
 
     # register the services
     hass.services.async_register(DOMAIN, "write", writeservice)

@@ -29,16 +29,11 @@ class GiciskyBluetoothDeviceData(BluetoothData):
         super().__init__()
 
         # The last service_info we saw that had a payload
-        # We keep this to help in reauth flows where we want to reprocess and old
-        # value with a new bindkey.
         self.last_service_info: BluetoothServiceInfoBleak | None = None
 
         self.device: DeviceEntry | None = None
         self.last_updated: datetime | None = None
         self.is_connected: bool = False
-
-        self.last_update()
-
 
     def supported(self, data: BluetoothServiceInfoBleak) -> bool:
         if not super().supported(data):
@@ -93,13 +88,12 @@ class GiciskyBluetoothDeviceData(BluetoothData):
         self.update_predefined_sensor(
             SensorLibrary.VOLTAGE__ELECTRIC_POTENTIAL_VOLT, round(volt, 1)
         )
-        self.update_predefined_sensor(
-            SensorLibrary.TIMESTAMP__NONE, self.last_updated, None, "Last Update Time"
-        )
+        # self.update_predefined_sensor(
+        #     SensorLibrary.TIMESTAMP__NONE, self.last_updated, None, "Last Update Time"
+        # )
         # self.update_predefined_binary_sensor(
         #     BinarySensorDeviceClass.CONNECTIVITY, self.is_connected
         # )
-        self.last_updated = None
         return True
     
     async def last_update(self):

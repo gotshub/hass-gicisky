@@ -1,7 +1,7 @@
 """Support for Gicisky sensors."""
 
 from __future__ import annotations
-
+from datetime import datetime
 from typing import cast
 from functools import partial
 from .gicisky_ble import SensorDeviceClass as GiciskySensorDeviceClass, SensorUpdate, Units
@@ -456,7 +456,7 @@ class GiciskyBluetoothSensorEntity(
     """Representation of a Gicisky BLE sensor."""
 
     @property
-    def native_value(self) -> int | float | None:
+    def native_value(self) -> int | float | datetime | None:
         """Return the native value."""
         return self.processor.entity_data.get(self.entity_key)
 

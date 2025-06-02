@@ -79,7 +79,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
 
     device_registry = dr.async_get(hass)
     event_classes = set(entry.data.get(CONF_DISCOVERED_EVENT_CLASSES, ()))
-    coordinator = GiciskyPassiveBluetoothProcessorCoordinator(
+    bt_coordinator = GiciskyPassiveBluetoothProcessorCoordinator(
         hass,
         _LOGGER,
         address=address,
@@ -91,13 +91,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
         entry=entry,
     )
 
-    async def _async_poll_data() -> SensorUpdate:
+    async def _async_poll_data(hass: HomeAssistant, entry: GiciskyConfigEntry,) -> SensorUpdate:
         try:
-            device = async_ble_device_from_address(hass, address)
-            if not device:
-                raise UpdateFailed("BLE Device none")
-            sensor = await data.async_poll(device)
-            return sensor
+            coordinator = entry.runtime_data
+            return await coordinator.device_data.async_poll()
         except Exception as err:
             raise UpdateFailed(f"polling error: {err}") from err
 
@@ -105,12 +102,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
         hass,
         _LOGGER,
         name=DOMAIN,
-        update_method=_async_poll_data,
+        update_method=partial(_async_poll_data, hass, entry),
         update_interval=timedelta(hours=24),
     )
 
-    entry.runtime_data = coordinator
+    entry.runtime_data = bt_coordinator
     entry.runtime_data.poll_coordinator = poll_coordinator
+    hass.data[DOMAIN][entry.entry_id]['poll_coordinator'] = poll_coordinator
     await poll_coordinator.async_config_entry_first_refresh()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -129,6 +127,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
                 entry_id = await get_entry_id_from_device(hass, device_id)
                 address = hass.data[DOMAIN][entry_id]['address']
                 data = hass.data[DOMAIN][entry_id]['data']
+                coordinator = hass.data[DOMAIN][entry_id]['poll_coordinator']
                 ble_device = async_ble_device_from_address(hass, address)
                 threshold = int(service.data.get("threshold", 128))
                 red_threshold = int(service.data.get("red_threshold", 128))
@@ -136,7 +135,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
 
                 max_retries = 3
                 await data.set_connected(True)
-                await poll_coordinator.async_refresh()
+                await coordinator.async_refresh()
                 for attempt in range(1, max_retries + 1):
                     success = await update_image(ble_device, data.device, image, threshold, red_threshold)
                     if success:
@@ -148,16 +147,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
                         await sleep(1)
                     else:
                         await data.set_connected(False)
-                        await poll_coordinator.async_refresh()
+                        await coordinator.async_refresh()
                         raise HomeAssistantError(f"Failed to write to {address} after {max_retries} attempts")
                 await data.set_connected(False)
-                await poll_coordinator.async_refresh()
+                await coordinator.async_refresh()
 
     # register the services
     hass.services.async_register(DOMAIN, "write", writeservice)
 
     # only start after all platforms have had a chance to subscribe
-    entry.async_on_unload(coordinator.async_start())
+    entry.async_on_unload(bt_coordinator.async_start())
     return True
 
 

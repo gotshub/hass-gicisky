@@ -2,16 +2,13 @@ from __future__ import annotations
 
 import logging
 from typing import Any
-from datetime import datetime, timezone
-from bleak.backends.device import BLEDevice
+
 from bluetooth_sensor_state_data import BluetoothData
 from cryptography.hazmat.primitives.ciphers.aead import AESCCM
 from home_assistant_bluetooth import BluetoothServiceInfoBleak
 from sensor_state_data import (
     SensorLibrary,
     BinarySensorDeviceClass,
-    SensorDeviceInfo,
-    SensorUpdate
 )
 
 from .devices import DEVICE_TYPES, DeviceEntry
@@ -34,8 +31,6 @@ class GiciskyBluetoothDeviceData(BluetoothData):
         self.last_service_info: BluetoothServiceInfoBleak | None = None
 
         self.device: DeviceEntry | None = None
-        self.last_updated: datetime | None = None
-        self.is_connected: bool = False
 
 
     def supported(self, data: BluetoothServiceInfoBleak) -> bool:
@@ -91,27 +86,7 @@ class GiciskyBluetoothDeviceData(BluetoothData):
         self.update_predefined_sensor(
             SensorLibrary.VOLTAGE__ELECTRIC_POTENTIAL_VOLT, round(volt, 1)
         )
-        self.update_predefined_sensor(
-            SensorLibrary.TIMESTAMP__NONE, self.last_updated, None, "Last Update Time"
-        )
-        self.update_predefined_binary_sensor(
-            BinarySensorDeviceClass.CONNECTIVITY, self.is_connected
-        )
+        # self.update_predefined_binary_sensor(
+        #     BinarySensorDeviceClass.CONNECTIVITY, False
+        # )
         return True
-    
-    async def last_update(self):
-        now_utc: datetime = datetime.now(timezone.utc)
-        self.last_updated = now_utc
-
-    async def set_connected(self, connected: bool):
-        self.is_connected = connected
-    
-    async def async_poll(self, ble_device: BLEDevice) -> SensorUpdate:
-        self._events_updates.clear()
-        self.update_predefined_sensor(
-            SensorLibrary.TIMESTAMP__NONE, self.last_updated, None, "Last Update Time"
-        )
-        self.update_predefined_binary_sensor(
-            BinarySensorDeviceClass.CONNECTIVITY, self.is_connected
-        )
-        return self._finish_update()

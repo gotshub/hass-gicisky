@@ -1,7 +1,7 @@
 """Support for Gicisky binary sensors."""
 
 from __future__ import annotations
-from functools import partial
+
 from .gicisky_ble import (
     BinarySensorDeviceClass as GiciskyBinarySensorDeviceClass,
     SensorUpdate,
@@ -201,9 +201,3 @@ class GiciskyBluetoothBinarySensorEntity(
     def available(self) -> bool:
         """Return True if entity is available."""
         return super().available
-
-    async def async_added_to_hass(self) -> None:
-        await super().async_added_to_hass()
-        poll_coordinator = self.processor.coordinator.poll_coordinator
-        remove = poll_coordinator.async_add_listener(partial(self.processor.async_handle_update, poll_coordinator.data))
-        self.async_on_remove(remove)

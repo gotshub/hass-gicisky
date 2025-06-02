@@ -8,7 +8,7 @@ from .gicisky_ble import SensorDeviceClass as GiciskySensorDeviceClass, SensorUp
 from .gicisky_ble.const import (
     ExtendedSensorDeviceClass as GiciskyExtendedSensorDeviceClass,
 )
-
+from homeassistant.util.dt import parse_datetime
 from homeassistant.components.bluetooth.passive_update_processor import (
     PassiveBluetoothDataUpdate,
     PassiveBluetoothProcessorEntity,
@@ -458,7 +458,10 @@ class GiciskyBluetoothSensorEntity(
     @property
     def native_value(self) -> int | float | datetime | None:
         """Return the native value."""
-        return self.processor.entity_data.get(self.entity_key)
+        value = self.processor.entity_data.get(self.entity_key)
+        if isinstance(value, str) and parse_datetime(value):
+            value = parse_datetime(value)
+        return value
 
     @property
     def available(self) -> bool:

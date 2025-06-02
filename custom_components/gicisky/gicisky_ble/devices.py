@@ -42,6 +42,7 @@ DEVICE_TYPES: dict[int, DeviceEntry] = {
         width=296,
         height=128,
         rotation=90,
+        max_voltage=3.0
     ),
     0x4B: DeviceEntry(
         name="EPD 42",

@@ -71,7 +71,7 @@ async def update_image(
                 if client.is_connected:
                     await client.disconnect()
             except Exception as e:
-                _LOGGER.warning(f"{ble_device.address} Already disconnected: {e}")
+                _LOGGER.debug(f"{ble_device.address} Already disconnected: {e}")
 
 class GiciskyClient:
     class Status(Enum):

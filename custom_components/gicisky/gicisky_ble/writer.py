@@ -55,7 +55,8 @@ async def update_image(
         ]
         if len(char_uuids) < 2:
             raise BleakServiceMissing(f"UUID Len: {len(char_uuids)}")
-        gicisky = GiciskyClient(client, char_uuids, device)
+        sorted_uuids = sorted(char_uuids, key=lambda x: int(x[4:8], 16))
+        gicisky = GiciskyClient(client, sorted_uuids, device)
         await gicisky.start_notify()
         success = await gicisky.write_image(image, threshold, red_threshold)
         await gicisky.stop_notify()
@@ -111,7 +112,7 @@ class GiciskyClient:
         chunk = len(data)
         for i in range(0, len(data), chunk):
             await self.client.write_gatt_char(uuid, data[i : i + chunk])
-            await sleep(0.05)
+            #await sleep(0.05)
 
     def _notification_handler(self, _: Any, data: bytearray) -> None:
         if self.command_data == None:

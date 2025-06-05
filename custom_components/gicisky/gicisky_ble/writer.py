@@ -100,7 +100,7 @@ class GiciskyClient:
     @disconnect_on_missing_services
     async def start_notify(self) -> None:
         await self.client.start_notify(self.cmd_uuid, self._notification_handler)
-        await sleep(0.5)
+        await sleep(1.0)
 
     @disconnect_on_missing_services
     async def stop_notify(self) -> None:
@@ -112,7 +112,7 @@ class GiciskyClient:
         chunk = len(data)
         for i in range(0, len(data), chunk):
             await self.client.write_gatt_char(uuid, data[i : i + chunk])
-            await sleep(0.05)
+            #await sleep(0.05)
 
     def _notification_handler(self, _: Any, data: bytearray) -> None:
         if self.command_data == None:
@@ -126,10 +126,25 @@ class GiciskyClient:
         return data
 
     async def write_with_response(self, uuid, packet: bytes) -> bytes:
-        self.command_data = None
-        self.event.clear()
-        await self.write(uuid, packet)
-        return await self.read()
+        # self.command_data = None
+        # self.event.clear()
+        # await self.write(uuid, packet)
+        # return await self.read()
+        last_exception = None
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                self.command_data = None
+                self.event.clear()
+                await self.write(uuid, packet)
+                return await self.read()
+            except Exception as e:
+                last_exception = e
+                if attempt < max_retries:
+                    _LOGGER.warning(f"Write retry (attempt {attempt}/{max_retries})", attempt, max_retries)
+                    await sleep(0.5)
+                    continue
+                raise last_exception
     
     async def write_start_with_response(self) -> bytes:
         return await self.write_with_response(self.cmd_uuid, self._make_cmd_packet(0x01))

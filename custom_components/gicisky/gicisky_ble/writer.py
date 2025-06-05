@@ -62,12 +62,16 @@ async def update_image(
         await gicisky.stop_notify()
         return success
     except Exception as e:
-        _LOGGER.error("Fail update: %s", e)
+        _LOGGER.error(f"Fail update: {e}")
         _LOGGER.error(traceback.print_exc())
         return False
     finally:
-        if client and client.is_connected:
-            await client.disconnect()
+        if client:
+            try:
+                if client.is_connected:
+                    await client.disconnect()
+            except Exception as e:
+                _LOGGER.error(f"Fail update: {e}")
 
 class GiciskyClient:
     class Status(Enum):

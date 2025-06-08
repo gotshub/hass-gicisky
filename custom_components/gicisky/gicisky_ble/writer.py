@@ -4,7 +4,6 @@ from __future__ import annotations
 from enum import Enum
 import logging
 import struct
-import traceback
 from typing import Any, Callable, TypeVar
 from asyncio import Event, wait_for, sleep
 from PIL import Image
@@ -31,9 +30,12 @@ def disconnect_on_missing_services(func: WrapFuncType) -> WrapFuncType:
         try:
             return await func(self, *args, **kwargs)
         except (BleakServiceMissing, BleakCharacteristicMissing):
-            if self.client.is_connected:
-                await self.client.clear_cache()
-                await self.client.disconnect()
+            try:
+                if self.client.is_connected:
+                    await self.client.clear_cache()
+                    await self.client.disconnect()
+            except Exception:
+                pass
             raise
     return wrapper  # type: ignore
 
@@ -59,11 +61,13 @@ async def update_image(
         gicisky = GiciskyClient(client, sorted_uuids, device)
         await gicisky.start_notify()
         success = await gicisky.write_image(image, threshold, red_threshold)
-        await gicisky.stop_notify()
+        try:
+            await gicisky.stop_notify()
+        except Exception as e:
+            _LOGGER.warning(f"{ble_device.address} Already stop notify: {e}")
         return success
     except Exception as e:
-        _LOGGER.error(f"Fail update: {e}")
-        _LOGGER.error(traceback.print_exc())
+        _LOGGER.error(f"Update failed: {e}")
         return False
     finally:
         if client:
@@ -200,7 +204,7 @@ class GiciskyClient:
                     raise Exception(f"Status Error: {status}")
             return True
         except Exception as e:
-            _LOGGER.error("Fail write: %s", e)
+            _LOGGER.error(f"Write failed: {e}")
             return False
         finally:
             _LOGGER.debug("Finish")

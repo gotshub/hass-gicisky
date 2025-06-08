@@ -142,7 +142,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
                         await data.last_update()
                         break
 
-                    _LOGGER.warning("Write failed to %s (attempt %d/%d)", address, attempt, max_retries)
+                    _LOGGER.warning(f"Write failed to {address} (attempt {attempt}/{max_retries})")
                     if attempt < max_retries:
                         await sleep(1)
                     else:

@@ -77,7 +77,7 @@ actions:
             rain != '0' else start + ' 비 예보' if start != '비안옴' else start }}
           font: fonts/OwnglyphParkDaHyun.ttf
           anchor: mb
-          x: 170
+          x: 175
           "y": 210
           size: 40
           color: |

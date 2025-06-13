@@ -41,7 +41,7 @@ actions:
           font: fonts/GmarketSansTTFBold.ttf
           anchor: rt
           x: 245
-          "y": 30
+          "y": 35
           size: 40
           color: black
         - type: text
@@ -49,8 +49,8 @@ actions:
             {{ state_attr('weather.naver', 'temperature') }}
           font: fonts/GmarketSansTTFBold.ttf
           anchor: rb
-          x: 215
-          "y": 110
+          x: 220
+          "y": 115
           size: 40
           color: black
         - type: text
@@ -59,7 +59,7 @@ actions:
           font: fonts/GmarketSansTTFBold.ttf
           anchor: rb
           x: 245
-          "y": 100
+          "y": 105
           size: 20
           color: black
         - type: text

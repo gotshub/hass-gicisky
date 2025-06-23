@@ -149,7 +149,7 @@ class GiciskyClient:
             except Exception as e:
                 last_exception = e
                 if attempt < max_retries:
-                    _LOGGER.warning(f"Write retry (attempt {attempt}/{max_retries})", attempt, max_retries)
+                    _LOGGER.warning(f"Write retry (attempt {attempt}/{max_retries})")
                     await sleep(0.5)
                     continue
                 raise last_exception

@@ -66,3 +66,10 @@ write:
           min: 0
           max: 255
           step: 1
+    dry_run:
+      name: Dry Run
+      description: "Generate image without sending to device"
+      required: false
+      default: false
+      selector:
+        boolean:

@@ -5,6 +5,8 @@ from __future__ import annotations
 from functools import partial
 import logging
 from asyncio import sleep, Lock
+from io import BytesIO
+from datetime import timedelta
 from .imagegen import *
 from .gicisky_ble import GiciskyBluetoothDeviceData, SensorUpdate
 from .gicisky_ble.writer import update_image
@@ -16,7 +18,7 @@ from homeassistant.components.bluetooth import (
 )
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, callback
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.device_registry import DeviceRegistry
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util.signal_type import SignalType
@@ -31,7 +33,12 @@ from .const import (
 from .coordinator import GiciskyPassiveBluetoothProcessorCoordinator
 from .types import GiciskyConfigEntry
 
-PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.EVENT, Platform.SENSOR]
+PLATFORMS: list[Platform] = [
+    Platform.BINARY_SENSOR,
+    Platform.EVENT,
+    Platform.SENSOR,
+    Platform.CAMERA,
+]
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -122,6 +129,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
             if isinstance(device_ids, str):
                 device_ids = [device_ids]
 
+            dry_run = service.data.get("dry_run", False)
+
             # Process each device
             for device_id in device_ids:
                 entry_id = await get_entry_id_from_device(hass, device_id)
@@ -132,6 +141,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: GiciskyConfigEntry) -> b
                 threshold = int(service.data.get("threshold", 128))
                 red_threshold = int(service.data.get("red_threshold", 128))
                 image = await hass.async_add_executor_job(customimage, entry_id, data.device, service, hass)
+
+                # Always update the camera entity with the generated image
+                entity_registry = er.async_get(hass)
+                camera_entity_id = entity_registry.async_get_entity_id(
+                    "camera", DOMAIN, f"{address}_displayed_content"
+                )
+                if camera_entity_id:
+                    camera_entity = hass.data["entity_components"]["camera"].get_entity(camera_entity_id)
+                    if camera_entity:
+                        with BytesIO() as image_binary:
+                            image.save(image_binary, "JPEG")
+                            camera_entity.set_image(image_binary.getvalue())
+
+                # If dry_run is True, skip sending to the actual device
+                if dry_run:
+                    continue
 
                 max_retries = 3
                 await data.set_connected(True)

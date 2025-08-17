@@ -36,6 +36,14 @@ DEVICE_TYPES: dict[int, DeviceEntry] = {
         rotation=270,
         mirror_x=True
     ),
+    0x28: DeviceEntry(
+        name="TFT 29",
+        model="TFT 2.9\" BW",
+        width=296,
+        height=128,
+        rotation=90,
+        max_voltage=3.0
+    ),
     0x33: DeviceEntry(
         name="EPD 29",
         model="EPD 2.9\" BWR",

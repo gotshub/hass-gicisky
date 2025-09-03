@@ -68,6 +68,6 @@ write:
       name: Dry Run
       description: "Generate image without sending to device"
       required: false
-      default: false
+      example: 'false'
       selector:
         boolean:

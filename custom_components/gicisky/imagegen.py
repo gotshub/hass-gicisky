@@ -1,20 +1,15 @@
 import io
 import logging
 import os
-import pprint
 import math
 import json
-from math import radians
 
 import requests
 import qrcode
-import shutil
 from io import BytesIO
 import base64
 
 import urllib
-from .const import DOMAIN
-from .util import get_image_folder, get_image_path
 from PIL import Image, ImageDraw, ImageFont
 import barcode
 from barcode.writer import ImageWriter
@@ -614,12 +609,12 @@ def customimage(entity_id, device, service, hass):
         img = img.rotate(-rotate, expand=True)
     rgb_image = img.convert('RGB')
     patha = os.path.join(os.path.dirname(__file__), entity_id + '.jpg')
-    pathb = get_image_path(hass, entity_id)
-    pathc = get_image_folder(hass)
-    isExist = os.path.exists(pathc)
-    if not isExist:
-        os.makedirs(pathc)
-    rgb_image.save(pathb, format='JPEG', quality="maximum")
+    # pathb = get_image_path(hass, entity_id)
+    # pathc = get_image_folder(hass)
+    # isExist = os.path.exists(pathc)
+    # if not isExist:
+    #     os.makedirs(pathc)
+    # rgb_image.save(pathb, format='JPEG', quality="maximum")
     # shutil.copy2(patha,pathb)
 
     return rgb_image
